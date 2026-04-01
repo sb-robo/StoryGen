@@ -1,89 +1,214 @@
-# 🚀 Project Name
+# 🚀 StoryGen
+
+> AI-powered software delivery planning tool that transforms BRDs into features, Jira stories, and test cases — with human review at every step.
+
+---
 
 ## 📌 Overview
 
-This project is a backend application built using FastAPI. It provides APIs for handling core business logic, data storage, and AI-related operations like embeddings and vector search.
+StoryGen is a full-stack AI-powered platform that ingests Business Requirement Documents (BRDs) and processes them through a structured, multi-step AI pipeline.
+
+It generates:
+
+* Features & sub-features
+* User stories
+* Story points
+* Test cases
+
+Each stage includes **human-in-the-loop validation**, ensuring accuracy, control, and production usability.
 
 ---
 
 ## 🛠️ Tech Stack
 
-* Python
-* FastAPI
-* PostgreSQL (for relational data, vectors & embeddings)
-* SQLAlchemy / ORM
-* Alembic (for migrations)
+### Backend
 
----
+* **Python 3.12+**
+* **FastAPI** — async REST APIs
+* **SQLAlchemy (async)** — ORM
+* **Alembic** — migrations
+* **PostgreSQL** — relational + vector-ready storage
+* **LiteLLM** — LLM abstraction (Azure GPT-4o)
+* **uv** — dependency & environment manager
 
-## ⚙️ Setup Instructions
+### AI Layer
 
-### 1. Clone the repository
+* Agent-based orchestration
+* Graph-based execution pipelines
+* RAG (Retrieval-Augmented Generation)
+* Prompt engineering modules
+* Stateful workflow management
 
-```bash
-git clone <your-repo-url>
-cd <project-folder>
-```
+### Frontend
 
-### 2. Create virtual environment
+* **React (Vite)**
+* **Tailwind CSS**
 
-```bash
-python -m venv venv
-venv\Scripts\activate   # Windows
-# source venv/bin/activate  # Mac/Linux
-```
+### Dev Tooling
 
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Create `.env` file
-
-Create a `.env` file in the root directory and add:
-
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/db_name
-SECRET_KEY=your_secret
-```
-
----
-
-## 🗄️ Database Setup
-
-* Ensure PostgreSQL is running
-* Update `DATABASE_URL` with your credentials
-
-Run migrations:
-
-```bash
-alembic upgrade head
-```
-
----
-
-## ▶️ Run the Application
-
-```bash
-uvicorn main:app --reload
-```
+* **Streamlit** — internal testing & rapid AI prototyping
 
 ---
 
 ## 📂 Project Structure
 
 ```
-project/
-│── app/
-│   ├── api/
-│   ├── models/
-│   ├── services/
-│   └── core/
-│── migrations/
-│── .env
-│── requirements.txt
-│── main.py
+storygen/
+├── backend/
+│   ├── alembic/                  # DB migrations
+│   │   ├── versions/
+│   │   ├── env.py
+│   │   └── script.py.mako
+│
+│   ├── app/
+│   │   ├── api/                  # API routes (v1, future versions)
+│   │   ├── ai/                   # AI orchestration layer
+│   │   │   ├── agents/           # Agent definitions
+│   │   │   ├── graphs/           # Workflow graphs / pipelines
+│   │   │   ├── nodes/            # Atomic execution steps
+│   │   │   ├── prompts/          # Prompt templates
+│   │   │   ├── rag/              # Retrieval + embeddings logic
+│   │   │   └── states/           # Pipeline state management
+│   │
+│   │   ├── db/                   # Database setup
+│   │   │   ├── base.py
+│   │   │   └── models/
+│   │
+│   │   ├── repositories/         # Data access layer
+│   │   ├── schemas/              # Pydantic schemas
+│   │   ├── services/             # Business logic
+│   │   ├── utils/                # Helpers/utilities
+│   │   ├── tests/                # Backend tests (co-located)
+│   │   ├── uploads/              # Temporary file storage
+│   │
+│   │   ├── __init__.py
+│   │   └── main.py               # FastAPI entrypoint
+│
+│   ├── .env
+│   ├── alembic.ini
+│   ├── pyproject.toml
+│   └── uv.lock
+│
+├── frontend/                     # React app
+├── streamlit_app/                # Internal tooling
+│
+├── .python-version
+├── .gitignore
+└── README.md
+```
+
+---
+
+## ⚙️ Setup Instructions
+
+### Prerequisites
+
+* Python 3.12+
+* Node.js 18+
+* PostgreSQL (running locally)
+* `uv` installed → https://docs.astral.sh/uv/
+
+---
+
+## 🔧 Backend Setup
+
+```bash
+git clone <your-repo-url>
+cd storygen/backend
+```
+
+### Install dependencies
+
+```bash
+uv sync
+```
+
+### Create `.env`
+
+```env
+DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/storygen
+```
+
+### Run migrations
+
+```bash
+uv run alembic upgrade head
+```
+
+### Start server
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+* API → http://localhost:8000
+* Docs → http://localhost:8000/docs
+
+---
+
+## 💻 Frontend Setup
+
+```bash
+cd storygen/frontend
+npm install
+npm run dev
+```
+
+* UI → http://localhost:5173
+
+---
+
+## 🧪 Streamlit (Internal Tooling)
+
+```bash
+cd storygen/streamlit_app
+uv run streamlit run app.py
+```
+
+Used for:
+
+* Testing AI pipelines
+* Debugging prompts
+* Rapid prototyping
+
+---
+
+## 🗄️ Database
+
+* PostgreSQL with async driver (`asyncpg`)
+* Supports:
+
+  * Relational data
+  * Vector embeddings (for RAG)
+* Managed via Alembic migrations
+
+### Commands
+
+```bash
+uv run alembic revision --autogenerate -m "message"
+uv run alembic upgrade head
+```
+
+---
+
+## 🔄 AI Pipeline Flow
+
+```
+BRD Upload
+    ↓
+Feature Extraction (AI)
+    ↓
+Review & Edit (Human)
+    ↓
+Sub-feature Generation (AI)
+    ↓
+Review & Edit (Human)
+    ↓
+Story Generation (AI)
+    ↓
+Review + Story Points (Human)
+    ↓
+Export → Jira / CSV
 ```
 
 ---
@@ -91,22 +216,24 @@ project/
 ## 🧪 Running Tests
 
 ```bash
-pytest
+cd backend
+uv run pytest
 ```
 
 ---
 
-## 📌 Notes
+## 📌 Best Practices
 
-* PostgreSQL is used for:
+* Do not commit `.env`
+* Use `uv add` instead of `pip install`
+* Commit `uv.lock` for reproducibility
+* Keep AI logic modular inside `app/ai`
+* Maintain strict separation:
 
-  * Application data
-  * Vector embeddings (AI/ML features)
-* Do not commit `.env` file (add it to `.gitignore`)
-* Use `DATABASE_URL` for database configuration
+  * API → Services → Repositories → DB
 
 ---
 
 ## 👨‍💻 Author
 
-Suraj Biswas
+**Suraj Biswas**
