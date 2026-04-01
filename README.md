@@ -2,15 +2,15 @@
 
 ## 📌 Overview
 
-This project is a backend application built using modern technologies. It provides APIs for handling core business logic, data processing, and integrations.
+This project is a backend application built using FastAPI. It provides APIs for handling core business logic, data storage, and AI-related operations like embeddings and vector search.
 
 ---
 
 ## 🛠️ Tech Stack
 
 * Python
-* FastAPI / Django
-* PostgreSQL
+* FastAPI
+* PostgreSQL (for relational data, vectors & embeddings)
 * SQLAlchemy / ORM
 * Alembic (for migrations)
 
@@ -44,17 +44,16 @@ pip install -r requirements.txt
 Create a `.env` file in the root directory and add:
 
 ```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=your_user
-DB_PASSWORD=your_password
-DB_NAME=your_db
+DATABASE_URL=postgresql://username:password@localhost:5432/db_name
 SECRET_KEY=your_secret
 ```
 
 ---
 
 ## 🗄️ Database Setup
+
+* Ensure PostgreSQL is running
+* Update `DATABASE_URL` with your credentials
 
 Run migrations:
 
@@ -66,16 +65,8 @@ alembic upgrade head
 
 ## ▶️ Run the Application
 
-For FastAPI:
-
 ```bash
 uvicorn main:app --reload
-```
-
-For Django:
-
-```bash
-python manage.py runserver
 ```
 
 ---
@@ -107,9 +98,12 @@ pytest
 
 ## 📌 Notes
 
+* PostgreSQL is used for:
+
+  * Application data
+  * Vector embeddings (AI/ML features)
 * Do not commit `.env` file (add it to `.gitignore`)
-* Use proper environment variables for sensitive data
-* Follow clean code and modular structure
+* Use `DATABASE_URL` for database configuration
 
 ---
 
