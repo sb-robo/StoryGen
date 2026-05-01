@@ -1,7 +1,6 @@
 from fastapi import APIRouter, status, Depends
 from fastapi.responses import JSONResponse
 from app.core.dependencies import get_db
-from app.db.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
