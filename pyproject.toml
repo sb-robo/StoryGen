@@ -9,4 +9,6 @@ dependencies = [
     "bcrypt>=5.0.0",
     "fastapi[standard]>=0.135.2",
     "passlib>=1.7.4",
+    "pyjwt[crypto]>=2.12.1",
+    "python-multipart>=0.0.22",
 ]

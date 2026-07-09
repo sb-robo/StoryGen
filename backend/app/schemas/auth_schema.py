@@ -36,5 +36,5 @@ class UserPasswordChangeRequest(PasswordMixin):
     current_password: str = Field(...)
 
 
-class ResetPasswordRequest(PasswordMixin):
+class UserPasswordResetRequest(PasswordMixin):
     pass

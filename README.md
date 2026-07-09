@@ -54,46 +54,42 @@ Each stage includes **human-in-the-loop validation**, ensuring accuracy, control
 
 ```
 storygen/
+├── architecture/
+│   └── PROJECT_STRUCTURE.md
 ├── backend/
-│   ├── alembic/                  # DB migrations
-│   │   ├── versions/
+│   ├── alembic/
+│   │   ├── README
 │   │   ├── env.py
 │   │   └── script.py.mako
-│
 │   ├── app/
-│   │   ├── api/                  # API routes (v1, future versions)
-│   │   ├── ai/                   # AI orchestration layer
-│   │   │   ├── agents/           # Agent definitions
-│   │   │   ├── graphs/           # Workflow graphs / pipelines
-│   │   │   ├── nodes/            # Atomic execution steps
-│   │   │   ├── prompts/          # Prompt templates
-│   │   │   ├── rag/              # Retrieval + embeddings logic
-│   │   │   └── states/           # Pipeline state management
-│   │
-│   │   ├── db/                   # Database setup
-│   │   │   ├── base.py
+│   │   ├── ai/
+│   │   │   ├── agents/
+│   │   │   ├── graphs/
+│   │   │   ├── nodes/
+│   │   │   ├── prompts/
+│   │   │   ├── rag/
+│   │   │   └── states/
+│   │   ├── api/
+│   │   │   └── v1/
+│   │   │       └── routers/
+│   │   ├── core/
+│   │   ├── db/
 │   │   │   └── models/
-│   │
-│   │   ├── repositories/         # Data access layer
-│   │   ├── schemas/              # Pydantic schemas
-│   │   ├── services/             # Business logic
-│   │   ├── utils/                # Helpers/utilities
-│   │   ├── tests/                # Backend tests (co-located)
-│   │   ├── uploads/              # Temporary file storage
-│   │
-│   │   ├── __init__.py
-│   │   └── main.py               # FastAPI entrypoint
-│
-│   ├── .env
-│   ├── alembic.ini
-│   ├── pyproject.toml
-│   └── uv.lock
-│
-├── frontend/                     # React app
-├── streamlit_app/                # Internal tooling
-│
+│   │   ├── repositories/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   └── main.py
+│   └── alembic.ini
+├── frontend/
+│   ├── public/
+│   └── src/
+│       └── assets/
+├── streamlit_app/
+│   └── app.py
 ├── .python-version
 ├── .gitignore
+├── pyproject.toml
 └── README.md
 ```
 

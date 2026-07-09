@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator, model_validator, Field
-from app.core.validators import validate_password_strength
+from app.utils.validators import validate_password_strength
 
 
 class PasswordMixin(BaseModel):
