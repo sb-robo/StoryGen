@@ -1,15 +1,15 @@
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models.user import User
 from app.repositories.auth_repository import AuthRepository
 from app.schemas.auth_schema import (
-    UserRegisterRequest,
     UserLoginRequest,
-    UserResponse,
     UserPasswordChangeRequest,
     UserPasswordResetRequest,
+    UserRegisterRequest,
+    UserResponse,
 )
-from app.db.models.user import User
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict
-from fastapi import HTTPException, status
 from app.utils.password_handler import hash_password, verify_password
 
 
@@ -40,7 +40,7 @@ class AuthService:
 
         return UserResponse.model_validate(user)
 
-    async def change_password(self, data: UserPasswordChangeRequest, user: User) -> Dict:
+    async def change_password(self, data: UserPasswordChangeRequest, user: User) -> dict:
         if not verify_password(data.current_password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Credentials"
@@ -51,5 +51,5 @@ class AuthService:
         await self.db.commit()
         return {"messgae": "Password changed successfully"}
 
-    async def reset_password(self, data: UserPasswordResetRequest, user: User) -> Dict:
+    async def reset_password(self, data: UserPasswordResetRequest, user: User) -> dict:
         pass

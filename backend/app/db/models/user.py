@@ -1,7 +1,9 @@
-from app.db.models.base import Base
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Integer, DateTime, String, Boolean, func
 from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.models.base import Base
 
 
 class User(Base):

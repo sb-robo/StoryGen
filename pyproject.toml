@@ -12,3 +12,5 @@ dependencies = [
     "pyjwt[crypto]>=2.12.1",
     "python-multipart>=0.0.22",
 ]
+[tool.ruff.lint]
+ignore = ["I001"]
