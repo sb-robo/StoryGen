@@ -3,5 +3,9 @@ from app.core.config import settings
 
 engine = create_async_engine(settings.DATABASE_URL, echo=settings.ECHO_SQL)
 async_session_local = async_sessionmaker(
-    AsyncSession, autocommit=False, autoflush=False, bind=engine
+    bind=engine,
+    class_=AsyncSession,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
 )
