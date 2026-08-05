@@ -21,6 +21,8 @@ class OperationType(StrEnum):
     FEATURE_EXTRACTION = "feature_extraction"
     SUB_FEATURE_GENERATION = "sub_feature_generation"
     STORY_GENERATION = "story_generation"
+    STORY_POINT_ESTIMATION = "story_point_estimation"
+    TEST_CASE_GENERATION = "test_case_generation"
 
 
 class AsyncOperation(Base):

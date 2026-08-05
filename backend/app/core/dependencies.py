@@ -9,7 +9,13 @@ from app.db.models.user import User
 from app.db.session import async_session_local
 from app.repositories.auth_repository import AuthRepository
 from app.services.auth_service import AuthService
-from app.services.ai import FeatureService, StoryService, SubFeatureService
+from app.services.ai import (
+    FeatureService,
+    StoryPointsService,
+    StoryService,
+    SubFeatureService,
+    TestCaseService,
+)
 from app.services.brd import BrdService
 from app.services.operations import OperationService
 from app.services.user_service import UserService
@@ -55,6 +61,14 @@ def get_sub_feature_service(db: AsyncSession = Depends(get_db)) -> SubFeatureSer
 
 def get_story_service(db: AsyncSession = Depends(get_db)) -> StoryService:
     return StoryService(db)
+
+
+def get_story_points_service(db: AsyncSession = Depends(get_db)) -> StoryPointsService:
+    return StoryPointsService(db)
+
+
+def get_test_case_service(db: AsyncSession = Depends(get_db)) -> TestCaseService:
+    return TestCaseService(db)
 
 
 async def _resolve_dev_user(db: AsyncSession) -> User:

@@ -1,8 +1,13 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
-from app.core.dependencies import get_current_user, get_story_service, get_sub_feature_service
+from app.core.dependencies import (
+    get_current_user,
+    get_operation_service,
+    get_story_service,
+    get_sub_feature_service,
+)
 from app.db.models.user import User
-from app.schemas.operation_schema import OperationResponse
+from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.story_schema import StoryListResponse, StoryStatusFilter
 from app.schemas.sub_feature_schema import (
     SubFeatureResponse,
@@ -11,8 +16,44 @@ from app.schemas.sub_feature_schema import (
 )
 from app.services.ai import StoryService, SubFeatureService
 from app.services.ai.tasks import run_story_generation_task
+from app.services.operations import OperationService
+from app.utils.operation_urls import SUB_FEATURE_OPERATION_TYPES
 
 router = APIRouter()
+
+
+@router.get(
+    "/status/{operation_id}",
+    response_model=OperationResponse,
+    summary="Get sub-feature story generation operation status",
+)
+async def get_sub_feature_operation_status(
+    operation_id: str,
+    current_user: User = Depends(get_current_user),
+    operation_service: OperationService = Depends(get_operation_service),
+) -> OperationResponse:
+    return await operation_service.get_status(
+        current_user.id,
+        operation_id,
+        allowed_types=SUB_FEATURE_OPERATION_TYPES,
+    )
+
+
+@router.get(
+    "/result/{operation_id}",
+    response_model=OperationResultResponse,
+    summary="Get sub-feature story generation operation result",
+)
+async def get_sub_feature_operation_result(
+    operation_id: str,
+    current_user: User = Depends(get_current_user),
+    operation_service: OperationService = Depends(get_operation_service),
+) -> OperationResultResponse:
+    return await operation_service.get_result(
+        current_user.id,
+        operation_id,
+        allowed_types=SUB_FEATURE_OPERATION_TYPES,
+    )
 
 
 @router.patch(
@@ -66,6 +107,10 @@ async def reject_sub_feature(
     response_model=OperationResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Generate user stories from an approved sub-feature (async)",
+    description=(
+        "Poll `GET /sub-features/status/{operation_id}` then "
+        "`GET /sub-features/result/{operation_id}`."
+    ),
 )
 async def generate_stories(
     sub_feature_id: int,

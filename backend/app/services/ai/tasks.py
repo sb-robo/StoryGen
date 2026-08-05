@@ -3,8 +3,10 @@ import logging
 from app.db.session import async_session_local
 from app.repositories.operation_repository import OperationRepository
 from app.services.ai.feature_service import FeatureService
-from app.services.ai.sub_feature_service import SubFeatureService
+from app.services.ai.story_points_service import StoryPointsService
 from app.services.ai.story_service import StoryService
+from app.services.ai.sub_feature_service import SubFeatureService
+from app.services.ai.test_case_service import TestCaseService
 
 logger = logging.getLogger(__name__)
 
@@ -72,4 +74,20 @@ async def run_story_generation_task(operation_id: str) -> None:
         operation_id,
         complete_fn_name="complete_generation",
         service_factory=StoryService,
+    )
+
+
+async def run_story_point_estimation_task(operation_id: str) -> None:
+    await _run_ai_task(
+        operation_id,
+        complete_fn_name="complete_estimation",
+        service_factory=StoryPointsService,
+    )
+
+
+async def run_test_case_generation_task(operation_id: str) -> None:
+    await _run_ai_task(
+        operation_id,
+        complete_fn_name="complete_generation",
+        service_factory=TestCaseService,
     )

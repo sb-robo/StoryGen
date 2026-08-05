@@ -25,6 +25,9 @@ class StoryResponse(BaseModel):
     status: str
     story_points: int | None = None
     points_rationale: str | None = None
+    points_status: str | None = None
+    points_reviewed_by: int | None = None
+    points_reviewed_at: datetime | None = None
     reviewed_by: int | None = None
     reviewed_at: datetime | None = None
     sort_order: int
@@ -79,3 +82,42 @@ class StoryReviewResponse(BaseModel):
     status: str
     reviewed_by: int
     reviewed_at: datetime
+
+
+class StoryPointsUpdateRequest(BaseModel):
+    story_points: int = Field(ge=1, le=21)
+    points_rationale: str | None = Field(default=None, min_length=1)
+
+
+class StoryPointsResultResponse(BaseModel):
+    story_id: int
+    operation_id: str
+    story_points: int
+    points_rationale: str
+    points_status: str
+
+    @classmethod
+    def build(
+        cls,
+        *,
+        story_id: int,
+        operation_id: str,
+        story_points: int,
+        points_rationale: str,
+        points_status: str,
+    ) -> "StoryPointsResultResponse":
+        return cls(
+            story_id=story_id,
+            operation_id=operation_id,
+            story_points=story_points,
+            points_rationale=points_rationale,
+            points_status=points_status,
+        )
+
+
+class StoryPointsReviewResponse(BaseModel):
+    id: int
+    story_points: int
+    points_status: str
+    points_reviewed_by: int
+    points_reviewed_at: datetime

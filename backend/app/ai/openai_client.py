@@ -98,3 +98,13 @@ class OpenAIClient:
         if parsed is None:
             raise RuntimeError(f"OpenAI returned no parsed output for node {node_name}")
         return parsed
+
+    async def embed_text(self, text: str) -> list[float]:
+        if self._client is None:
+            raise RuntimeError("OPENAI_API_KEY is not configured.")
+
+        response = await self._client.embeddings.create(
+            model=settings.OPENAI_EMBEDDING_MODEL,
+            input=text,
+        )
+        return response.data[0].embedding

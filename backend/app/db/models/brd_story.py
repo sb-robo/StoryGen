@@ -14,6 +14,11 @@ class StoryReviewStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class PointsStatus(StrEnum):
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+
+
 class BrdStory(Base):
     __tablename__ = "brd_stories"
 
@@ -38,6 +43,13 @@ class BrdStory(Base):
     )
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     points_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    points_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    points_reviewed_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    points_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     reviewed_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

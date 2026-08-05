@@ -11,12 +11,19 @@ from app.schemas.operation_schema import (
     OperationResponse,
     OperationResultResponse,
 )
-from app.schemas.story_schema import StoryGenerationResultResponse
+from app.schemas.story_schema import (
+    StoryGenerationResultResponse,
+    StoryPointsResultResponse,
+)
 from app.schemas.sub_feature_schema import SubFeatureGenerationResultResponse
+from app.schemas.test_case_schema import TestCaseGenerationResultResponse
 from app.services.ai.feature_service import FeatureService
+from app.services.ai.story_points_service import StoryPointsService
 from app.services.ai.story_service import StoryService
 from app.services.ai.sub_feature_service import SubFeatureService
+from app.services.ai.test_case_service import TestCaseService
 from app.services.brd.service import BrdService
+from app.utils.operation_urls import operation_status_url
 
 
 class OperationService:
@@ -27,6 +34,8 @@ class OperationService:
         self.feature_service = FeatureService(db)
         self.sub_feature_service = SubFeatureService(db)
         self.story_service = StoryService(db)
+        self.story_points_service = StoryPointsService(db)
+        self.test_case_service = TestCaseService(db)
 
     def _to_response(self, operation: AsyncOperation) -> OperationResponse:
         return OperationResponse(
@@ -93,24 +102,49 @@ class OperationService:
             sort_order=sort_order,
         )
 
-    async def get_status(self, user_id: int, operation_id: str) -> OperationResponse:
+    async def _get_owned_operation(
+        self,
+        user_id: int,
+        operation_id: str,
+        *,
+        allowed_types: set[str] | None = None,
+    ) -> AsyncOperation:
         operation = await self.repo.get_by_id_for_user(operation_id, user_id)
         if not operation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Operation not found",
             )
+        if allowed_types is not None and operation.operation_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Operation not found",
+            )
+        return operation
+
+    async def get_status(
+        self,
+        user_id: int,
+        operation_id: str,
+        *,
+        allowed_types: set[str] | None = None,
+    ) -> OperationResponse:
+        operation = await self._get_owned_operation(
+            user_id, operation_id, allowed_types=allowed_types
+        )
         return self._to_response(operation)
 
     async def get_result(
-        self, user_id: int, operation_id: str, *, include_text: bool = True
+        self,
+        user_id: int,
+        operation_id: str,
+        *,
+        allowed_types: set[str] | None = None,
+        include_text: bool = True,
     ) -> OperationResultResponse:
-        operation = await self.repo.get_by_id_for_user(operation_id, user_id)
-        if not operation:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Operation not found",
-            )
+        operation = await self._get_owned_operation(
+            user_id, operation_id, allowed_types=allowed_types
+        )
 
         if operation.status in {
             OperationStatus.PENDING.value,
@@ -122,7 +156,9 @@ class OperationService:
                     "message": "Operation is still in progress",
                     "operation_id": operation.id,
                     "status": operation.status,
-                    "status_url": f"/api/v1/brds/status/{operation.id}",
+                    "status_url": operation_status_url(
+                        operation.id, operation.operation_type
+                    ),
                 },
             )
 
@@ -183,6 +219,34 @@ class OperationService:
                 resource_type=operation.resource_type,
                 resource_id=operation.resource_id,
                 result=story_result.model_dump(mode="json"),
+            )
+
+        if operation.operation_type == OperationType.STORY_POINT_ESTIMATION.value:
+            points_result: StoryPointsResultResponse = (
+                await self.story_points_service.get_estimation_result(
+                    user_id, operation_id
+                )
+            )
+            return OperationResultResponse(
+                operation_id=operation.id,
+                status=operation.status,
+                resource_type=operation.resource_type,
+                resource_id=operation.resource_id,
+                result=points_result.model_dump(mode="json"),
+            )
+
+        if operation.operation_type == OperationType.TEST_CASE_GENERATION.value:
+            test_case_result: TestCaseGenerationResultResponse = (
+                await self.test_case_service.get_generation_result(
+                    user_id, operation_id
+                )
+            )
+            return OperationResultResponse(
+                operation_id=operation.id,
+                status=operation.status,
+                resource_type=operation.resource_type,
+                resource_id=operation.resource_id,
+                result=test_case_result.model_dump(mode="json"),
             )
 
         if operation.resource_type != "brd":

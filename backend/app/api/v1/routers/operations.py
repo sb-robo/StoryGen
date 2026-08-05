@@ -81,17 +81,3 @@ async def list_operations(
         sort_by=sort_by.value,
         sort_order=sort_order.value,
     )
-
-
-@router.get(
-    "/{operation_id}",
-    response_model=OperationResponse,
-    summary="Get operation by id",
-    description="Returns a single async operation owned by the current user.",
-)
-async def get_operation(
-    operation_id: str,
-    current_user: User = Depends(get_current_user),
-    operation_service: OperationService = Depends(get_operation_service),
-) -> OperationResponse:
-    return await operation_service.get_status(current_user.id, operation_id)

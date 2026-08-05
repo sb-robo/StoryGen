@@ -4,6 +4,8 @@ from math import ceil
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.utils.operation_urls import operation_result_url, operation_status_url
+
 
 class OperationStatusValue(StrEnum):
     PENDING = "pending"
@@ -18,6 +20,8 @@ class OperationTypeValue(StrEnum):
     FEATURE_EXTRACTION = "feature_extraction"
     SUB_FEATURE_GENERATION = "sub_feature_generation"
     STORY_GENERATION = "story_generation"
+    STORY_POINT_ESTIMATION = "story_point_estimation"
+    TEST_CASE_GENERATION = "test_case_generation"
 
 
 class OperationSortBy(StrEnum):
@@ -55,12 +59,12 @@ class OperationResponse(BaseModel):
     @computed_field
     @property
     def status_url(self) -> str:
-        return f"/api/v1/brds/status/{self.operation_id}"
+        return operation_status_url(self.operation_id, self.operation_type)
 
     @computed_field
     @property
     def result_url(self) -> str:
-        return f"/api/v1/brds/result/{self.operation_id}"
+        return operation_result_url(self.operation_id, self.operation_type)
 
 
 class OperationResultResponse(BaseModel):
@@ -70,7 +74,7 @@ class OperationResultResponse(BaseModel):
     resource_id: int | None = None
     result: dict | None = Field(
         default=None,
-        description="BRD detail payload when operation succeeded",
+        description="Type-specific payload when the operation succeeded",
     )
 
 

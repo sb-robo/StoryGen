@@ -1,13 +1,18 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
-from app.core.dependencies import get_current_user, get_feature_service, get_sub_feature_service
+from app.core.dependencies import (
+    get_current_user,
+    get_feature_service,
+    get_operation_service,
+    get_sub_feature_service,
+)
 from app.db.models.user import User
 from app.schemas.feature_schema import (
     FeatureResponse,
     FeatureReviewResponse,
     FeatureUpdateRequest,
 )
-from app.schemas.operation_schema import OperationResponse
+from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.sub_feature_schema import (
     ReviewStatusFilter,
     SubFeatureListResponse,
@@ -15,8 +20,52 @@ from app.schemas.sub_feature_schema import (
 )
 from app.services.ai import FeatureService, SubFeatureService
 from app.services.ai.tasks import run_sub_feature_generation_task
+from app.services.operations import OperationService
+from app.utils.operation_urls import FEATURE_OPERATION_TYPES
 
 router = APIRouter()
+
+
+@router.get(
+    "/status/{operation_id}",
+    response_model=OperationResponse,
+    summary="Get feature pipeline operation status",
+    description=(
+        "Poll for feature_extraction or sub_feature_generation operations "
+        "until `done` is true."
+    ),
+)
+async def get_feature_operation_status(
+    operation_id: str,
+    current_user: User = Depends(get_current_user),
+    operation_service: OperationService = Depends(get_operation_service),
+) -> OperationResponse:
+    return await operation_service.get_status(
+        current_user.id,
+        operation_id,
+        allowed_types=FEATURE_OPERATION_TYPES,
+    )
+
+
+@router.get(
+    "/result/{operation_id}",
+    response_model=OperationResultResponse,
+    summary="Get feature pipeline operation result",
+    description=(
+        "Returns extracted features or generated sub-features when the operation "
+        "succeeded. Responds 409 while running, 422 if failed."
+    ),
+)
+async def get_feature_operation_result(
+    operation_id: str,
+    current_user: User = Depends(get_current_user),
+    operation_service: OperationService = Depends(get_operation_service),
+) -> OperationResultResponse:
+    return await operation_service.get_result(
+        current_user.id,
+        operation_id,
+        allowed_types=FEATURE_OPERATION_TYPES,
+    )
 
 
 @router.patch(
@@ -64,6 +113,10 @@ async def reject_feature(
     response_model=OperationResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Generate sub-features from an approved feature (async)",
+    description=(
+        "Poll `GET /features/status/{operation_id}` then "
+        "`GET /features/result/{operation_id}`."
+    ),
 )
 async def generate_sub_features(
     feature_id: int,

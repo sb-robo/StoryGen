@@ -32,6 +32,7 @@ from app.services.ai.tasks import run_feature_extraction_task
 from app.services.brd import BrdService
 from app.services.brd.tasks import run_brd_parse_task
 from app.services.operations import OperationService
+from app.utils.operation_urls import BRD_OPERATION_TYPES
 
 router = APIRouter()
 
@@ -75,14 +76,22 @@ async def upload_brd(
     "/status/{operation_id}",
     response_model=OperationResponse,
     summary="Get BRD upload/reparse status",
-    description="Poll this endpoint until `done` is true (`succeeded` or `failed`).",
+    description=(
+        "Poll BRD upload/reparse operations until `done` is true. "
+        "For AI pipeline operations use the status endpoint on /features, "
+        "/sub-features, or /stories."
+    ),
 )
 async def get_brd_operation_status(
     operation_id: str,
     current_user: User = Depends(get_current_user),
     operation_service: OperationService = Depends(get_operation_service),
 ) -> OperationResponse:
-    return await operation_service.get_status(current_user.id, operation_id)
+    return await operation_service.get_status(
+        current_user.id,
+        operation_id,
+        allowed_types=BRD_OPERATION_TYPES,
+    )
 
 
 @router.get(
@@ -90,8 +99,8 @@ async def get_brd_operation_status(
     response_model=OperationResultResponse,
     summary="Get BRD upload/reparse result",
     description=(
-        "Returns the BRD detail when the operation succeeded. "
-        "Responds 409 while running, 422 if failed."
+        "Returns the BRD detail when a BRD upload/reparse operation succeeded. "
+        "Responds 409 while running, 422 if failed, 404 for non-BRD operation types."
     ),
 )
 async def get_brd_operation_result(
@@ -104,7 +113,10 @@ async def get_brd_operation_result(
     operation_service: OperationService = Depends(get_operation_service),
 ) -> OperationResultResponse:
     return await operation_service.get_result(
-        current_user.id, operation_id, include_text=include_text
+        current_user.id,
+        operation_id,
+        allowed_types=BRD_OPERATION_TYPES,
+        include_text=include_text,
     )
 
 
@@ -180,8 +192,8 @@ async def list_brds(
     summary="Extract features from a parsed BRD (async operation)",
     description=(
         "Runs AI feature extraction on parsed Markdown. "
-        "Poll `GET /brds/status/{operation_id}` then "
-        "`GET /brds/result/{operation_id}` for the extracted features."
+        "Poll `GET /features/status/{operation_id}` then "
+        "`GET /features/result/{operation_id}` for the extracted features."
     ),
 )
 async def extract_brd_features(

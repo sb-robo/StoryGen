@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     HF_TOKEN: str | None = None
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_EMBEDDING_DIMENSIONS: int = 1536
+    RAG_SIMILAR_STORY_LIMIT: int = 5
     LLM_MAX_RETRIES: int = 3
     LLM_TIMEOUT_SECONDS: int = 120
     LLM_MAX_ITERATIONS: int = 2
