@@ -9,6 +9,7 @@ from app.db.models.user import User
 from app.db.session import async_session_local
 from app.repositories.auth_repository import AuthRepository
 from app.services.auth_service import AuthService
+from app.services.ai import FeatureService, StoryService, SubFeatureService
 from app.services.brd import BrdService
 from app.services.operations import OperationService
 from app.services.user_service import UserService
@@ -42,6 +43,18 @@ def get_brd_service(db: AsyncSession = Depends(get_db)) -> BrdService:
 
 def get_operation_service(db: AsyncSession = Depends(get_db)) -> OperationService:
     return OperationService(db)
+
+
+def get_feature_service(db: AsyncSession = Depends(get_db)) -> FeatureService:
+    return FeatureService(db)
+
+
+def get_sub_feature_service(db: AsyncSession = Depends(get_db)) -> SubFeatureService:
+    return SubFeatureService(db)
+
+
+def get_story_service(db: AsyncSession = Depends(get_db)) -> StoryService:
+    return StoryService(db)
 
 
 async def _resolve_dev_user(db: AsyncSession) -> User:

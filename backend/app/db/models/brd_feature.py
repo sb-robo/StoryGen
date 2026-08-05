@@ -2,7 +2,6 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.models.base import Base
@@ -25,11 +24,14 @@ class BrdFeature(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    operation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("async_operations.id", ondelete="SET NULL"), nullable=True
+    )
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
-    clarifying_questions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    clarifying_questions: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=FeatureStatus.PENDING_REVIEW.value
@@ -40,7 +42,7 @@ class BrdFeature(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    extraction_operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

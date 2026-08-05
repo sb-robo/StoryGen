@@ -15,6 +15,9 @@ class OperationStatusValue(StrEnum):
 class OperationTypeValue(StrEnum):
     BRD_UPLOAD = "brd_upload"
     BRD_REPARSE = "brd_reparse"
+    FEATURE_EXTRACTION = "feature_extraction"
+    SUB_FEATURE_GENERATION = "sub_feature_generation"
+    STORY_GENERATION = "story_generation"
 
 
 class OperationSortBy(StrEnum):
@@ -33,9 +36,7 @@ class OperationResponse(BaseModel):
     operation_type: str
     status: str
     resource_type: str | None = None
-    resource_id: int | None = Field(
-        default=None, description="BRD id once the upload row exists"
-    )
+    resource_id: int | None = Field(default=None, description="BRD id once the upload row exists")
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

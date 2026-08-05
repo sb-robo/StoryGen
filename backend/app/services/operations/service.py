@@ -3,14 +3,19 @@ from datetime import datetime
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.async_operation import AsyncOperation, OperationStatus
+from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.repositories.operation_repository import OperationRepository
-from app.schemas.brd_schema import BrdDetailResponse
+from app.schemas.feature_schema import FeatureExtractionResultResponse
 from app.schemas.operation_schema import (
     OperationListResponse,
     OperationResponse,
     OperationResultResponse,
 )
+from app.schemas.story_schema import StoryGenerationResultResponse
+from app.schemas.sub_feature_schema import SubFeatureGenerationResultResponse
+from app.services.ai.feature_service import FeatureService
+from app.services.ai.story_service import StoryService
+from app.services.ai.sub_feature_service import SubFeatureService
 from app.services.brd.service import BrdService
 
 
@@ -19,6 +24,9 @@ class OperationService:
         self.db = db
         self.repo = OperationRepository(db)
         self.brd_service = BrdService(db)
+        self.feature_service = FeatureService(db)
+        self.sub_feature_service = SubFeatureService(db)
+        self.story_service = StoryService(db)
 
     def _to_response(self, operation: AsyncOperation) -> OperationResponse:
         return OperationResponse(
@@ -129,13 +137,61 @@ class OperationService:
                 },
             )
 
-        if operation.resource_type != "brd" or operation.resource_id is None:
+        if operation.resource_id is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Operation has no result resource",
             )
 
-        brd_detail: BrdDetailResponse = await self.brd_service.get_brd(
+        if operation.operation_type == OperationType.FEATURE_EXTRACTION.value:
+            extraction_result: FeatureExtractionResultResponse = (
+                await self.feature_service.get_extraction_result(
+                    user_id, operation_id
+                )
+            )
+            return OperationResultResponse(
+                operation_id=operation.id,
+                status=operation.status,
+                resource_type=operation.resource_type,
+                resource_id=operation.resource_id,
+                result=extraction_result.model_dump(mode="json"),
+            )
+
+        if operation.operation_type == OperationType.SUB_FEATURE_GENERATION.value:
+            sub_feature_result: SubFeatureGenerationResultResponse = (
+                await self.sub_feature_service.get_generation_result(
+                    user_id, operation_id
+                )
+            )
+            return OperationResultResponse(
+                operation_id=operation.id,
+                status=operation.status,
+                resource_type=operation.resource_type,
+                resource_id=operation.resource_id,
+                result=sub_feature_result.model_dump(mode="json"),
+            )
+
+        if operation.operation_type == OperationType.STORY_GENERATION.value:
+            story_result: StoryGenerationResultResponse = (
+                await self.story_service.get_generation_result(
+                    user_id, operation_id
+                )
+            )
+            return OperationResultResponse(
+                operation_id=operation.id,
+                status=operation.status,
+                resource_type=operation.resource_type,
+                resource_id=operation.resource_id,
+                result=story_result.model_dump(mode="json"),
+            )
+
+        if operation.resource_type != "brd":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Operation has no result resource",
+            )
+
+        brd_detail = await self.brd_service.get_brd(
             user_id,
             operation.resource_id,
             include_text=include_text,

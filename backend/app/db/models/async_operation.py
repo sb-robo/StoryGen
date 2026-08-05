@@ -18,14 +18,15 @@ class OperationStatus(StrEnum):
 class OperationType(StrEnum):
     BRD_UPLOAD = "brd_upload"
     BRD_REPARSE = "brd_reparse"
+    FEATURE_EXTRACTION = "feature_extraction"
+    SUB_FEATURE_GENERATION = "sub_feature_generation"
+    STORY_GENERATION = "story_generation"
 
 
 class AsyncOperation(Base):
     __tablename__ = "async_operations"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -45,6 +46,4 @@ class AsyncOperation(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

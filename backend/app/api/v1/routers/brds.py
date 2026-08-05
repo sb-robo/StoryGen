@@ -11,7 +11,7 @@ from fastapi import (
 from datetime import datetime
 from fastapi.responses import FileResponse
 
-from app.core.dependencies import get_brd_service, get_current_user, get_operation_service
+from app.core.dependencies import get_brd_service, get_current_user, get_feature_service, get_operation_service
 from app.db.models.user import User
 from app.schemas.brd_schema import (
     BrdContentResponse,
@@ -26,6 +26,9 @@ from app.schemas.brd_schema import (
     BrdStatusFilter,
 )
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
+from app.schemas.feature_schema import FeatureListResponse, FeatureStatusFilter
+from app.services.ai import FeatureService
+from app.services.ai.tasks import run_feature_extraction_task
 from app.services.brd import BrdService
 from app.services.brd.tasks import run_brd_parse_task
 from app.services.operations import OperationService
@@ -167,6 +170,50 @@ async def list_brds(
         created_to=created_to,
         sort_by=sort_by.value,
         sort_order=sort_order.value,
+    )
+
+
+@router.post(
+    "/{brd_id}/features/extract",
+    response_model=OperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Extract features from a parsed BRD (async operation)",
+    description=(
+        "Runs AI feature extraction on parsed Markdown. "
+        "Poll `GET /brds/status/{operation_id}` then "
+        "`GET /brds/result/{operation_id}` for the extracted features."
+    ),
+)
+async def extract_brd_features(
+    brd_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    feature_service: FeatureService = Depends(get_feature_service),
+) -> OperationResponse:
+    operation = await feature_service.enqueue_extraction(current_user.id, brd_id)
+    background_tasks.add_task(run_feature_extraction_task, operation.operation_id)
+    return operation
+
+
+@router.get(
+    "/{brd_id}/features",
+    response_model=FeatureListResponse,
+    summary="List extracted features for a BRD",
+)
+async def list_brd_features(
+    brd_id: int,
+    status_filter: FeatureStatusFilter | None = Query(
+        default=None,
+        alias="status",
+        description="Filter by feature review status",
+    ),
+    current_user: User = Depends(get_current_user),
+    feature_service: FeatureService = Depends(get_feature_service),
+) -> FeatureListResponse:
+    return await feature_service.list_features(
+        current_user.id,
+        brd_id,
+        status_filter=status_filter.value if status_filter else None,
     )
 
 

@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     BRD_STORAGE_DIR: str = str(BACKEND_DIR / "storage" / "brds")
     MAX_UPLOAD_SIZE_MB: int = 20
     HF_TOKEN: str | None = None
+    OPENAI_API_KEY: str | None = None
+    OPENAI_MODEL: str = "gpt-4o"
+    LLM_MAX_RETRIES: int = 3
+    LLM_TIMEOUT_SECONDS: int = 120
+    LLM_MAX_ITERATIONS: int = 2
 
     @property
     def cors_origins_list(self) -> list[str]:
