@@ -32,6 +32,7 @@ class BrdFeature(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
     clarifying_questions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clarifying_answers: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=FeatureStatus.PENDING_REVIEW.value

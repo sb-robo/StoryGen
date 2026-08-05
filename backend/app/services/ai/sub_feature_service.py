@@ -8,7 +8,12 @@ from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
-from app.repositories.feature_repository import FeatureRepository
+from app.repositories.feature_repository import (
+    FeatureRepository,
+    decode_clarifying_answers,
+    decode_clarifying_questions,
+    format_clarifying_qa_for_prompt,
+)
 from app.repositories.operation_repository import OperationRepository
 from app.repositories.sub_feature_repository import SubFeatureRepository
 from app.schemas.operation_schema import OperationResponse
@@ -126,6 +131,10 @@ class SubFeatureService:
             feature_title=feature.title,
             feature_description=feature.description,
             source_excerpt=feature.source_excerpt,
+            clarifying_qa=format_clarifying_qa_for_prompt(
+                decode_clarifying_questions(feature.clarifying_questions),
+                decode_clarifying_answers(feature.clarifying_answers),
+            ),
             operation_id=operation_id,
             user_id=operation.user_id,
             brd_id=feature.brd_id,

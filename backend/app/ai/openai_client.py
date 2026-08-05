@@ -29,9 +29,10 @@ class OpenAIClient:
         model: str | None = None,
     ):
         self.db = db
-        self.model = model or settings.OPENAI_MODEL
+        self.model = (model or settings.openai_model).strip()
+        self.embedding_model = settings.openai_embedding_model
         self.log_repo = LlmCallLogRepository(db) if db is not None else None
-        key = (api_key or settings.OPENAI_API_KEY or "").strip()
+        key = (api_key or settings.openai_api_key).strip()
         self._client: AsyncOpenAI | None = (
             AsyncOpenAI(
                 api_key=key,
@@ -104,7 +105,7 @@ class OpenAIClient:
             raise RuntimeError("OPENAI_API_KEY is not configured.")
 
         response = await self._client.embeddings.create(
-            model=settings.OPENAI_EMBEDDING_MODEL,
+            model=self.embedding_model,
             input=text,
         )
         return response.data[0].embedding

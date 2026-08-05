@@ -11,11 +11,14 @@ from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import (
     FeatureRepository,
+    decode_clarifying_answers,
     decode_clarifying_questions,
+    encode_clarifying_answers,
     encode_clarifying_questions,
 )
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.feature_schema import (
+    ClarifyingAnswer,
     FeatureExtractionResultResponse,
     FeatureListResponse,
     FeatureResponse,
@@ -52,6 +55,10 @@ class FeatureService:
             confidence=feature.confidence,
             rationale=feature.rationale,
             clarifying_questions=decode_clarifying_questions(feature.clarifying_questions),
+            clarifying_answers=[
+                ClarifyingAnswer(**item)
+                for item in decode_clarifying_answers(feature.clarifying_answers)
+            ],
             source_excerpt=feature.source_excerpt,
             status=feature.status,
             reviewed_by=feature.reviewed_by,
@@ -241,10 +248,27 @@ class FeatureService:
         self, user_id: int, feature_id: int, payload: FeatureUpdateRequest
     ) -> FeatureResponse:
         feature = await self._get_owned_feature(user_id, feature_id)
+        if feature.status == FeatureStatus.REJECTED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Rejected features cannot be edited.",
+            )
+
+        answers_only = (
+            payload.title is None
+            and payload.description is None
+            and payload.clarifying_questions is None
+            and payload.clarifying_answers is not None
+        )
+        if feature.status == FeatureStatus.APPROVED.value and not answers_only:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Approved features can only be updated with clarifying_answers.",
+            )
         if feature.status not in {
             FeatureStatus.DRAFT.value,
             FeatureStatus.PENDING_REVIEW.value,
-        }:
+        } and not answers_only:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only draft or pending_review features can be edited.",
@@ -258,6 +282,21 @@ class FeatureService:
             feature.clarifying_questions = encode_clarifying_questions(
                 payload.clarifying_questions
             )
+        if payload.clarifying_answers is not None:
+            questions = decode_clarifying_questions(feature.clarifying_questions)
+            question_set = set(questions)
+            normalized: list[dict[str, str]] = []
+            for item in payload.clarifying_answers:
+                question = item.question.strip()
+                answer = item.answer.strip()
+                if question not in question_set:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Unknown clarifying question: {question}",
+                    )
+                if answer:
+                    normalized.append({"question": question, "answer": answer})
+            feature.clarifying_answers = encode_clarifying_answers(normalized)
 
         feature = await self.repo.update(feature)
         return self._to_response(feature)

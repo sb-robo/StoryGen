@@ -113,3 +113,48 @@ def decode_clarifying_questions(raw: str | None) -> list[str]:
         return data if isinstance(data, list) else []
     except json.JSONDecodeError:
         return []
+
+
+def encode_clarifying_answers(
+    answers: list[dict[str, str]] | None,
+) -> str | None:
+    if not answers:
+        return None
+    return json.dumps(answers)
+
+
+def decode_clarifying_answers(raw: str | None) -> list[dict[str, str]]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return []
+        result: list[dict[str, str]] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            question = str(item.get("question", "")).strip()
+            answer = str(item.get("answer", "")).strip()
+            if question and answer:
+                result.append({"question": question, "answer": answer})
+        return result
+    except json.JSONDecodeError:
+        return []
+
+
+def format_clarifying_qa_for_prompt(
+    questions: list[str],
+    answers: list[dict[str, str]],
+) -> str:
+    if not questions:
+        return "(none)"
+    answer_map = {item["question"]: item["answer"] for item in answers}
+    blocks: list[str] = []
+    for question in questions:
+        answer = answer_map.get(question, "").strip()
+        if answer:
+            blocks.append(f"Q: {question}\nA: {answer}")
+        else:
+            blocks.append(f"Q: {question}\nA: (not answered)")
+    return "\n\n".join(blocks)

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from logging import getLogger
 
 from app.api.v1 import api
-from app.core.config import apply_huggingface_token, settings
+from app.core.config import apply_huggingface_token, apply_openai_settings, settings
 
 logger = getLogger(__name__)
 ROUTE_PREFIX = "/api/v1"
@@ -23,7 +23,14 @@ app.include_router(api.router, prefix=ROUTE_PREFIX)
 @app.on_event("startup")
 async def startup_event():
     apply_huggingface_token()
+    apply_openai_settings()
     logger.info("Starting Up Application")
+    if settings.openai_is_configured:
+        logger.info("OpenAI configured: model=%s", settings.openai_model)
+    else:
+        logger.warning(
+            "OPENAI_API_KEY is not set; AI pipeline stages will return 503 until configured."
+        )
     if settings.HF_TOKEN:
         logger.info("HF_TOKEN configured for Hugging Face Hub downloads")
     else:

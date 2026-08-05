@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -30,13 +31,45 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 20
     HF_TOKEN: str | None = None
     OPENAI_API_KEY: str | None = None
-    OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_MODEL: str = "gpt-5.4"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_EMBEDDING_DIMENSIONS: int = 1536
     RAG_SIMILAR_STORY_LIMIT: int = 5
     LLM_MAX_RETRIES: int = 3
     LLM_TIMEOUT_SECONDS: int = 120
     LLM_MAX_ITERATIONS: int = 2
+
+    @field_validator(
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "OPENAI_EMBEDDING_MODEL",
+        "HF_TOKEN",
+        mode="before",
+    )
+    @classmethod
+    def strip_quoted_env_string(cls, value: str | None) -> str | None:
+        if value is None or not isinstance(value, str):
+            return value
+        cleaned = value.strip()
+        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'"}:
+            cleaned = cleaned[1:-1].strip()
+        return cleaned or None
+
+    @property
+    def openai_api_key(self) -> str:
+        return (self.OPENAI_API_KEY or "").strip()
+
+    @property
+    def openai_model(self) -> str:
+        return (self.OPENAI_MODEL or "gpt-5.4").strip()
+
+    @property
+    def openai_embedding_model(self) -> str:
+        return (self.OPENAI_EMBEDDING_MODEL or "text-embedding-3-small").strip()
+
+    @property
+    def openai_is_configured(self) -> bool:
+        return bool(self.openai_api_key)
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -75,4 +108,19 @@ def apply_huggingface_token() -> None:
     os.environ["HUGGING_FACE_HUB_TOKEN"] = token
 
 
+def apply_openai_settings() -> None:
+    """
+    Export OpenAI settings to os.environ for SDK defaults and third-party tools.
+
+    pydantic-settings reads .env into Settings but does not populate os.environ.
+    """
+    api_key = settings.openai_api_key
+    if api_key:
+        os.environ["OPENAI_API_KEY"] = api_key
+    model = settings.openai_model
+    if model:
+        os.environ["OPENAI_MODEL"] = model
+
+
 apply_huggingface_token()
+apply_openai_settings()

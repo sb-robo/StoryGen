@@ -1,0 +1,30 @@
+# Local PostgreSQL with pgvector (required for migration 0010+).
+#
+# Usage:
+#   docker compose up -d
+#   # Point backend/.env at:
+#   # DATABASE_URL=postgresql+asyncpg://postgres:suraj@localhost:5432/storygen
+#
+# If you already run PostgreSQL on port 5432, stop it first or change the host port below.
+
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    container_name: storygen-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: suraj
+      POSTGRES_DB: storygen
+    ports:
+      - "5432:5432"
+    volumes:
+      - storygen_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d storygen"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  storygen_pgdata:

@@ -12,6 +12,11 @@ class FeatureStatusFilter(StrEnum):
     REJECTED = "rejected"
 
 
+class ClarifyingAnswer(BaseModel):
+    question: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+
+
 class FeatureResponse(BaseModel):
     id: int
     brd_id: int
@@ -22,6 +27,7 @@ class FeatureResponse(BaseModel):
     confidence: float
     rationale: str
     clarifying_questions: list[str] = Field(default_factory=list)
+    clarifying_answers: list[ClarifyingAnswer] = Field(default_factory=list)
     source_excerpt: str | None = None
     status: str
     reviewed_by: int | None = None
@@ -71,6 +77,7 @@ class FeatureUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=512)
     description: str | None = Field(default=None, min_length=1)
     clarifying_questions: list[str] | None = None
+    clarifying_answers: list[ClarifyingAnswer] | None = None
 
 
 class FeatureReviewResponse(BaseModel):

@@ -35,6 +35,7 @@ def _make_feature_response(**overrides) -> FeatureResponse:
         confidence=0.9,
         rationale="Section 2",
         clarifying_questions=[],
+        clarifying_answers=[],
         source_excerpt="Users must log in",
         status="pending_review",
         reviewed_by=None,
