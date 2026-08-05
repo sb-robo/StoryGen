@@ -14,3 +14,7 @@ wheels/
 
 # folders
 architecture/
+docs/
+backend/storage/**
+!backend/storage/brds/
+!backend/storage/brds/.gitkeep
