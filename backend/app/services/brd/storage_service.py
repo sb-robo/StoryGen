@@ -82,6 +82,19 @@ class BrdStorageService:
         brd_dir = await self.ensure_brd_dir(user_id, brd_id)
         return brd_dir / "images"
 
+    async def clear_images_dir(self, user_id: int, brd_id: int) -> None:
+        """Remove previously extracted images before a re-parse writes new ones."""
+        images_dir = self.brd_dir(user_id, brd_id) / "images"
+        if not await aiofiles.os.path.exists(images_dir):
+            return
+
+        def _clear() -> None:
+            for path in images_dir.iterdir():
+                if path.is_file():
+                    path.unlink()
+
+        await asyncio.to_thread(_clear)
+
     async def read_parsed_markdown(self, parsed_text_path: str | None) -> str | None:
         if not parsed_text_path:
             return None

@@ -72,6 +72,25 @@ async def test_list_and_resolve_images(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_clear_images_dir_removes_stale_files(tmp_path: Path):
+    storage = BrdStorageService(root=tmp_path)
+    images_dir = await storage.images_dir(1, 2)
+    (images_dir / "img_001.png").write_bytes(b"png-bytes")
+    (images_dir / "img_002.png").write_bytes(b"png-bytes")
+
+    await storage.clear_images_dir(1, 2)
+
+    assert list(images_dir.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_clear_images_dir_noop_when_missing(tmp_path: Path):
+    storage = BrdStorageService(root=tmp_path)
+    # Directory was never created for this brd — should not raise.
+    await storage.clear_images_dir(99, 99)
+
+
+@pytest.mark.asyncio
 async def test_delete_brd_dir(tmp_path: Path):
     storage = BrdStorageService(root=tmp_path)
     brd_dir = await storage.ensure_brd_dir(4, 5)

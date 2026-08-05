@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,12 +24,20 @@ class Settings(BaseSettings):
     FIRST_ADMIN_EMAIL: str | None = None
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     DEBUG: bool = False
+    AUTH_DISABLED: bool = False
+    DEV_USER_EMAIL: str | None = None
     BRD_STORAGE_DIR: str = str(BACKEND_DIR / "storage" / "brds")
     MAX_UPLOAD_SIZE_MB: int = 20
+    HF_TOKEN: str | None = None
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def auth_disabled(self) -> bool:
+        """Auth bypass is only honored when DEBUG is also enabled."""
+        return self.AUTH_DISABLED and self.DEBUG
 
     @property
     def brd_storage_path(self) -> Path:
@@ -42,3 +51,20 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def apply_huggingface_token() -> None:
+    """
+    Export HF_TOKEN so huggingface_hub / transformers / Docling authenticate.
+
+    pydantic-settings reads .env into Settings but does not put values in os.environ,
+    which those libraries require.
+    """
+    token = (settings.HF_TOKEN or "").strip()
+    if not token:
+        return
+    os.environ["HF_TOKEN"] = token
+    os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+
+
+apply_huggingface_token()

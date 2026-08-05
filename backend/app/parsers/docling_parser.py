@@ -25,6 +25,10 @@ class DoclingParser(DocumentParser):
     def parse(self, file_path: Path, *, images_dir: Path | None = None) -> ParsedDocument:
         from docling.document_converter import DocumentConverter
 
+        from app.core.config import apply_huggingface_token
+
+        apply_huggingface_token()
+
         if not file_path.exists():
             raise FileNotFoundError(f"BRD file not found: {file_path}")
 

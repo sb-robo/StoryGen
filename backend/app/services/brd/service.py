@@ -1,7 +1,11 @@
+import asyncio
+import zipfile
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 
 from app.core.config import settings
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
@@ -22,12 +26,42 @@ from app.services.brd.parser_service import BrdParserService
 from app.services.brd.storage_service import BrdStorageService
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx"}
+ALLOWED_FORMAT_LABEL = "PDF (.pdf), Word (.docx), Excel (.xlsx)"
 EXTENSION_MIME = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
+# Browsers sometimes send a generic type; accept those when the extension is valid.
+ALLOWED_MIME_TYPES = set(EXTENSION_MIME.values()) | {
+    "application/octet-stream",
+    "binary/octet-stream",
+}
 PREVIEW_CHARS = 280
+PDF_MAGIC = b"%PDF-"
+
+
+def _sniff_content_sync(path: Path, extension: str) -> bool:
+    """
+    Verify the file's actual bytes match the claimed extension.
+
+    Cheap, dependency-free defense against a renamed file (e.g. an .exe
+    renamed to .pdf) rather than relying purely on extension/MIME headers.
+    """
+    if extension == ".pdf":
+        with open(path, "rb") as handle:
+            return handle.read(len(PDF_MAGIC)) == PDF_MAGIC
+
+    if extension in {".docx", ".xlsx"}:
+        # DOCX/XLSX are OOXML — zip containers with a well-known internal layout.
+        if not zipfile.is_zipfile(path):
+            return False
+        with zipfile.ZipFile(path) as archive:
+            names = set(archive.namelist())
+        marker = "word/document.xml" if extension == ".docx" else "xl/workbook.xml"
+        return marker in names
+
+    return True
 
 
 class BrdService:
@@ -45,12 +79,63 @@ class BrdService:
 
     def _normalize_extension(self, filename: str) -> str:
         extension = Path(filename).suffix.lower()
+        if not extension:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "File has no extension. "
+                    f"StoryGen only supports BRD uploads as {ALLOWED_FORMAT_LABEL}."
+                ),
+            )
         if extension not in ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type '{extension}'. Allowed: PDF, DOCX, XLSX.",
+                detail=(
+                    f"Unsupported BRD format '{extension}'. "
+                    f"Supported formats: {ALLOWED_FORMAT_LABEL}."
+                ),
             )
         return extension
+
+    def _validate_mime_type(self, mime_type: str | None, extension: str) -> str:
+        resolved = (mime_type or "").strip().lower() or EXTENSION_MIME[extension]
+        # Some clients append charset, e.g. application/pdf; charset=utf-8
+        resolved = resolved.split(";")[0].strip()
+        expected = EXTENSION_MIME[extension]
+        if resolved not in ALLOWED_MIME_TYPES and resolved != expected:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"MIME type '{resolved}' does not match supported BRD formats. "
+                    f"Supported formats: {ALLOWED_FORMAT_LABEL}."
+                ),
+            )
+        return resolved if resolved in EXTENSION_MIME.values() else expected
+
+    async def _ensure_unique_upload(
+        self, user_id: int, *, name: str, original_filename: str
+    ) -> None:
+        existing_by_name = await self.repo.find_by_name_for_user(user_id, name)
+        if existing_by_name:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"A BRD named '{existing_by_name.name}' already exists "
+                    f"(id={existing_by_name.id}). Choose a different name."
+                ),
+            )
+
+        existing_by_file = await self.repo.find_by_original_filename_for_user(
+            user_id, original_filename
+        )
+        if existing_by_file:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"File '{existing_by_file.original_filename}' was already uploaded "
+                    f"as BRD '{existing_by_file.name}' (id={existing_by_file.id})."
+                ),
+            )
 
     async def _get_owned_brd(self, user_id: int, brd_id: int) -> BrdDocument:
         brd = await self.repo.get_by_id_for_user(brd_id, user_id)
@@ -88,15 +173,31 @@ class BrdService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="BRD name is required",
             )
+        if len(brd_name) > 255:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="BRD name must be at most 255 characters",
+            )
 
-        if not file.filename:
+        if not file.filename or not file.filename.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Filename is required",
             )
 
-        extension = self._normalize_extension(file.filename)
-        mime_type = file.content_type or EXTENSION_MIME.get(extension)
+        original_filename = Path(file.filename).name.strip()
+        if not original_filename or original_filename in {".", ".."}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid filename",
+            )
+
+        extension = self._normalize_extension(original_filename)
+        mime_type = self._validate_mime_type(file.content_type, extension)
+        await self._ensure_unique_upload(
+            user_id, name=brd_name, original_filename=original_filename
+        )
+
         stored_filename = f"original{extension}"
 
         operation = await self.operation_repo.create(
@@ -107,11 +208,14 @@ class BrdService:
                 resource_type="brd",
             )
         )
+        # Commit the operation row on its own so it survives a rollback below
+        # (the unique-name insert failure rolls back the whole transaction).
+        await self.db.commit()
 
         brd = BrdDocument(
             user_id=user_id,
             name=brd_name,
-            original_filename=file.filename,
+            original_filename=original_filename,
             stored_filename=stored_filename,
             mime_type=mime_type,
             file_extension=extension,
@@ -120,7 +224,18 @@ class BrdService:
             original_path="",
             status=BrdStatus.UPLOADED.value,
         )
-        brd = await self.repo.create(brd)
+        try:
+            brd = await self.repo.create(brd)
+        except IntegrityError as exc:
+            # DB-level unique index is the source of truth for the race window
+            # between the pre-check above and this insert.
+            await self.db.rollback()
+            await self.operation_repo.mark_failed(operation, "Duplicate BRD name")
+            await self.db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A BRD named '{brd_name}' already exists. Choose a different name.",
+            ) from exc
 
         brd_dir = await self.storage.ensure_brd_dir(user_id, brd.id)
         brd.storage_path = str(brd_dir)
@@ -159,6 +274,17 @@ class BrdService:
                 detail="Uploaded file is empty",
             )
 
+        if not await asyncio.to_thread(_sniff_content_sync, original_path, extension):
+            await self.storage.delete_brd_dir(user_id, brd.id)
+            await self.repo.delete(brd)
+            error = (
+                f"File content does not look like a valid {extension} file. "
+                "The extension may have been changed on a different file type."
+            )
+            await self.operation_repo.mark_failed(operation, error)
+            await self.db.commit()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
         brd.original_path = str(original_path)
         brd.file_size_bytes = size
         brd.status = BrdStatus.PARSING.value
@@ -175,6 +301,11 @@ class BrdService:
     async def enqueue_reparse(self, user_id: int, brd_id: int) -> OperationResponse:
         """Create a reparse operation; caller schedules background parse by operation_id."""
         brd = await self._get_owned_brd(user_id, brd_id)
+        if brd.status == BrdStatus.PARSING.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This BRD is already being parsed. Wait for it to finish.",
+            )
         original = await self.storage.resolve_original_path(brd.original_path)
         if original is None:
             raise HTTPException(
@@ -233,31 +364,53 @@ class BrdService:
         self,
         user_id: int,
         *,
-        skip: int = 0,
-        limit: int = 20,
+        page: int = 1,
+        page_size: int = 20,
         status_filter: str | None = None,
         search: str | None = None,
+        file_extension: str | None = None,
+        has_images: bool | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> BrdListResponse:
+        if created_from and created_to and created_from > created_to:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="created_from must be earlier than or equal to created_to",
+            )
+
+        offset = (page - 1) * page_size
+        filters = {
+            "status": status_filter,
+            "search": search,
+            "file_extension": file_extension,
+            "has_images": has_images,
+            "created_from": created_from,
+            "created_to": created_to,
+        }
         items = await self.repo.list_for_user(
             user_id,
-            skip=skip,
-            limit=limit,
-            status=status_filter,
-            search=search,
+            offset=offset,
+            limit=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            **filters,
         )
-        total = await self.repo.count_for_user(
-            user_id,
-            status=status_filter,
-            search=search,
-        )
+        total = await self.repo.count_for_user(user_id, **filters)
         summaries = [await self._to_summary(item) for item in items]
-        return BrdListResponse(
+        return BrdListResponse.build(
             items=summaries,
             total=total,
-            skip=skip,
-            limit=limit,
+            page=page,
+            page_size=page_size,
             status=status_filter,
             search=search,
+            file_extension=file_extension,
+            has_images=has_images,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
 
     async def get_brd(
@@ -310,10 +463,39 @@ class BrdService:
             )
         return path, brd.original_filename, brd.mime_type
 
+    async def rename_brd(
+        self, user_id: int, brd_id: int, new_name: str
+    ) -> BrdDetailResponse:
+        brd = await self._get_owned_brd(user_id, brd_id)
+        conflict = await self.repo.find_by_name_for_user(
+            user_id, new_name, exclude_id=brd_id
+        )
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"A BRD named '{conflict.name}' already exists "
+                    f"(id={conflict.id}). Choose a different name."
+                ),
+            )
+
+        brd.name = new_name
+        try:
+            brd = await self.repo.update(brd)
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A BRD named '{new_name}' already exists. Choose a different name.",
+            ) from exc
+        return await self._to_detail(brd, include_text=False)
+
     async def delete_brd(self, user_id: int, brd_id: int) -> BrdDeleteResponse:
         brd = await self._get_owned_brd(user_id, brd_id)
         await self.storage.delete_brd_dir(user_id, brd_id)
         await self.repo.delete(brd)
+        # Avoid leaving dangling operation history pointing at a deleted BRD.
+        await self.operation_repo.delete_for_resource(user_id, "brd", brd_id)
         return BrdDeleteResponse(id=brd_id)
 
     async def _preview(self, brd: BrdDocument) -> str | None:

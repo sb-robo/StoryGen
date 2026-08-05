@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import StrEnum
+from math import ceil
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class BrdStatusFilter(StrEnum):
@@ -9,6 +10,26 @@ class BrdStatusFilter(StrEnum):
     PARSING = "parsing"
     PARSED = "parsed"
     PARSE_FAILED = "parse_failed"
+
+
+class BrdFileExtensionFilter(StrEnum):
+    PDF = ".pdf"
+    DOCX = ".docx"
+    XLSX = ".xlsx"
+
+
+class BrdSortBy(StrEnum):
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+    NAME = "name"
+    FILE_SIZE_BYTES = "file_size_bytes"
+    STATUS = "status"
+    ORIGINAL_FILENAME = "original_filename"
+
+
+class BrdSortOrder(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 class BrdResponse(BaseModel):
@@ -85,10 +106,66 @@ class BrdImageListResponse(BaseModel):
 class BrdListResponse(BaseModel):
     items: list[BrdResponse]
     total: int
-    skip: int
-    limit: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
     status: str | None = None
     search: str | None = None
+    file_extension: str | None = None
+    has_images: bool | None = None
+    sort_by: str
+    sort_order: str
+
+    @classmethod
+    def build(
+        cls,
+        *,
+        items: list[BrdResponse],
+        total: int,
+        page: int,
+        page_size: int,
+        status: str | None,
+        search: str | None,
+        file_extension: str | None,
+        has_images: bool | None,
+        sort_by: str,
+        sort_order: str,
+    ) -> "BrdListResponse":
+        total_pages = ceil(total / page_size) if page_size else 0
+        return cls(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+            has_next=page < total_pages,
+            has_prev=page > 1 and total > 0,
+            status=status,
+            search=search,
+            file_extension=file_extension,
+            has_images=has_images,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+
+class BrdRenameRequest(BaseModel):
+    name: str = Field(
+        min_length=1,
+        max_length=255,
+        description="New unique display name for this BRD",
+        examples=["Payments Platform BRD v2"],
+    )
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
 
 
 class BrdDeleteResponse(BaseModel):

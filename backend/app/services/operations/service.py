@@ -1,10 +1,16 @@
+from datetime import datetime
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.async_operation import AsyncOperation, OperationStatus
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.brd_schema import BrdDetailResponse
-from app.schemas.operation_schema import OperationResponse, OperationResultResponse
+from app.schemas.operation_schema import (
+    OperationListResponse,
+    OperationResponse,
+    OperationResultResponse,
+)
 from app.services.brd.service import BrdService
 
 
@@ -25,6 +31,58 @@ class OperationService:
             created_at=operation.created_at,
             updated_at=operation.updated_at,
             completed_at=operation.completed_at,
+        )
+
+    async def list_operations(
+        self,
+        user_id: int,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status_filter: str | None = None,
+        operation_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> OperationListResponse:
+        if created_from and created_to and created_from > created_to:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="created_from must be earlier than or equal to created_to",
+            )
+
+        offset = (page - 1) * page_size
+        filters = {
+            "status": status_filter,
+            "operation_type": operation_type,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "created_from": created_from,
+            "created_to": created_to,
+        }
+        items = await self.repo.list_for_user(
+            user_id,
+            offset=offset,
+            limit=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            **filters,
+        )
+        total = await self.repo.count_for_user(user_id, **filters)
+        return OperationListResponse.build(
+            items=[self._to_response(item) for item in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+            status=status_filter,
+            operation_type=operation_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
 
     async def get_status(self, user_id: int, operation_id: str) -> OperationResponse:

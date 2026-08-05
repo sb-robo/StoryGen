@@ -1,4 +1,6 @@
-from sqlalchemy import delete, func, or_, select
+from datetime import datetime
+
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.brd_document import BrdDocument
@@ -27,15 +29,41 @@ class BrdRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_for_user(
+    async def find_by_name_for_user(
+        self, user_id: int, name: str, *, exclude_id: int | None = None
+    ) -> BrdDocument | None:
+        query = select(BrdDocument).where(
+            BrdDocument.user_id == user_id,
+            func.lower(BrdDocument.name) == name.strip().lower(),
+        )
+        if exclude_id is not None:
+            query = query.where(BrdDocument.id != exclude_id)
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def find_by_original_filename_for_user(
+        self, user_id: int, original_filename: str
+    ) -> BrdDocument | None:
+        result = await self.db.execute(
+            select(BrdDocument).where(
+                BrdDocument.user_id == user_id,
+                func.lower(BrdDocument.original_filename)
+                == original_filename.strip().lower(),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    def _filtered_query(
         self,
         user_id: int,
         *,
-        skip: int = 0,
-        limit: int = 20,
         status: str | None = None,
         search: str | None = None,
-    ) -> list[BrdDocument]:
+        file_extension: str | None = None,
+        has_images: bool | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+    ) -> Select:
         query = select(BrdDocument).where(BrdDocument.user_id == user_id)
         if status:
             query = query.where(BrdDocument.status == status)
@@ -45,11 +73,56 @@ class BrdRepository:
                 or_(
                     BrdDocument.name.ilike(pattern),
                     BrdDocument.original_filename.ilike(pattern),
-                    BrdDocument.file_extension.ilike(pattern),
                 )
             )
+        if file_extension:
+            query = query.where(BrdDocument.file_extension == file_extension.lower())
+        if has_images is True:
+            query = query.where(BrdDocument.image_count > 0)
+        elif has_images is False:
+            query = query.where(BrdDocument.image_count == 0)
+        if created_from is not None:
+            query = query.where(BrdDocument.created_at >= created_from)
+        if created_to is not None:
+            query = query.where(BrdDocument.created_at <= created_to)
+        return query
+
+    async def list_for_user(
+        self,
+        user_id: int,
+        *,
+        offset: int,
+        limit: int,
+        status: str | None = None,
+        search: str | None = None,
+        file_extension: str | None = None,
+        has_images: bool | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> list[BrdDocument]:
+        query = self._filtered_query(
+            user_id,
+            status=status,
+            search=search,
+            file_extension=file_extension,
+            has_images=has_images,
+            created_from=created_from,
+            created_to=created_to,
+        )
+        sort_column = {
+            "created_at": BrdDocument.created_at,
+            "updated_at": BrdDocument.updated_at,
+            "name": BrdDocument.name,
+            "file_size_bytes": BrdDocument.file_size_bytes,
+            "status": BrdDocument.status,
+            "original_filename": BrdDocument.original_filename,
+        }.get(sort_by, BrdDocument.created_at)
+
+        order_expr = sort_column.asc() if sort_order == "asc" else sort_column.desc()
         result = await self.db.execute(
-            query.order_by(BrdDocument.id.desc()).offset(skip).limit(limit)
+            query.order_by(order_expr, BrdDocument.id.desc()).offset(offset).limit(limit)
         )
         return list(result.scalars().all())
 
@@ -59,22 +132,21 @@ class BrdRepository:
         *,
         status: str | None = None,
         search: str | None = None,
+        file_extension: str | None = None,
+        has_images: bool | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
     ) -> int:
-        query = select(func.count()).select_from(BrdDocument).where(
-            BrdDocument.user_id == user_id
+        base = self._filtered_query(
+            user_id,
+            status=status,
+            search=search,
+            file_extension=file_extension,
+            has_images=has_images,
+            created_from=created_from,
+            created_to=created_to,
         )
-        if status:
-            query = query.where(BrdDocument.status == status)
-        if search:
-            pattern = f"%{search.strip()}%"
-            query = query.where(
-                or_(
-                    BrdDocument.name.ilike(pattern),
-                    BrdDocument.original_filename.ilike(pattern),
-                    BrdDocument.file_extension.ilike(pattern),
-                )
-            )
-        result = await self.db.execute(query)
+        result = await self.db.execute(select(func.count()).select_from(base.subquery()))
         return result.scalar_one()
 
     async def update(self, brd: BrdDocument) -> BrdDocument:

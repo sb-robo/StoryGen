@@ -29,6 +29,15 @@ class AuthRepository:
         result = await self.db.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
+    async def get_first_active_user(self) -> User | None:
+        result = await self.db.execute(
+            select(User)
+            .where(User.is_active.is_(True))
+            .order_by(User.is_admin.desc(), User.id.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def update_password(self, user: User, hashed_password: str) -> User:
         user.hashed_password = hashed_password
         self.db.add(user)

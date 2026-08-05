@@ -15,6 +15,7 @@ dependencies = [
     "python-multipart>=0.0.22",
     "pydantic-settings>=2.12.0",
     "sqlalchemy[asyncio]>=2.0.48",
+    "openai>=2.53.0",
 ]
 
 [dependency-groups]

@@ -32,6 +32,9 @@ class BrdParserService:
     ) -> ParsedDocument:
         parser = self.get_parser(mime_type, extension)
         images_dir = await self.storage.images_dir(user_id, brd_id)
+        # A re-parse may extract fewer images than the previous run — clear
+        # stale ones first so listings never point at outdated files.
+        await self.storage.clear_images_dir(user_id, brd_id)
 
         # Docling is CPU/IO heavy and synchronous — keep the event loop free.
         parsed = await asyncio.to_thread(

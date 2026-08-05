@@ -8,6 +8,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from datetime import datetime
 from fastapi.responses import FileResponse
 
 from app.core.dependencies import get_brd_service, get_current_user, get_operation_service
@@ -16,8 +17,12 @@ from app.schemas.brd_schema import (
     BrdContentResponse,
     BrdDeleteResponse,
     BrdDetailResponse,
+    BrdFileExtensionFilter,
     BrdImageListResponse,
     BrdListResponse,
+    BrdRenameRequest,
+    BrdSortBy,
+    BrdSortOrder,
     BrdStatusFilter,
 )
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
@@ -34,7 +39,9 @@ router = APIRouter()
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload a BRD document (async operation)",
     description=(
-        "Multipart form: `name` (BRD display name) + `file` (PDF/DOCX/XLSX). "
+        "Multipart form: `name` (unique BRD display name) + `file`. "
+        "Supported formats only: PDF (.pdf), Word (.docx), Excel (.xlsx). "
+        "Rejects duplicate BRD names and duplicate original filenames for the same user. "
         "Returns an `operation_id` immediately. "
         "Poll `GET /brds/status/{operation_id}` for status, then "
         "`GET /brds/result/{operation_id}` for the parsed BRD."
@@ -46,10 +53,13 @@ async def upload_brd(
         ...,
         min_length=1,
         max_length=255,
-        description="Display name for this BRD",
+        description="Unique display name for this BRD",
         examples=["Payments Platform BRD"],
     ),
-    file: UploadFile = File(..., description="BRD file (PDF, DOCX, or XLSX)"),
+    file: UploadFile = File(
+        ...,
+        description="BRD file — PDF, DOCX, or XLSX only",
+    ),
     current_user: User = Depends(get_current_user),
     brd_service: BrdService = Depends(get_brd_service),
 ) -> OperationResponse:
@@ -99,11 +109,14 @@ async def get_brd_operation_result(
     "",
     response_model=BrdListResponse,
     summary="List my BRDs",
-    description="Paginated list with optional status filter and filename search.",
+    description=(
+        "Paginated BRD list with filters for status, search, file type, images, "
+        "and created date range."
+    ),
 )
 async def list_brds(
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(20, ge=1, le=100, description="Max records to return"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     status_filter: BrdStatusFilter | None = Query(
         default=None,
         alias="status",
@@ -115,15 +128,45 @@ async def list_brds(
         max_length=200,
         description="Case-insensitive search on BRD name or original filename",
     ),
+    file_extension: BrdFileExtensionFilter | None = Query(
+        default=None,
+        description="Filter by uploaded file type",
+    ),
+    has_images: bool | None = Query(
+        default=None,
+        description="true = only BRDs with extracted images; false = none",
+    ),
+    created_from: datetime | None = Query(
+        default=None,
+        description="Include BRDs created at/after this timestamp (ISO 8601)",
+    ),
+    created_to: datetime | None = Query(
+        default=None,
+        description="Include BRDs created at/before this timestamp (ISO 8601)",
+    ),
+    sort_by: BrdSortBy = Query(
+        default=BrdSortBy.CREATED_AT,
+        description="Sort field",
+    ),
+    sort_order: BrdSortOrder = Query(
+        default=BrdSortOrder.DESC,
+        description="Sort direction",
+    ),
     current_user: User = Depends(get_current_user),
     brd_service: BrdService = Depends(get_brd_service),
 ) -> BrdListResponse:
     return await brd_service.list_brds(
         current_user.id,
-        skip=skip,
-        limit=limit,
+        page=page,
+        page_size=page_size,
         status_filter=status_filter.value if status_filter else None,
         search=search,
+        file_extension=file_extension.value if file_extension else None,
+        has_images=has_images,
+        created_from=created_from,
+        created_to=created_to,
+        sort_by=sort_by.value,
+        sort_order=sort_order.value,
     )
 
 
@@ -224,6 +267,21 @@ async def reparse_brd(
     operation = await brd_service.enqueue_reparse(current_user.id, brd_id)
     background_tasks.add_task(run_brd_parse_task, operation.operation_id)
     return operation
+
+
+@router.patch(
+    "/{brd_id}",
+    response_model=BrdDetailResponse,
+    summary="Rename a BRD",
+    description="Updates the display name. Must remain unique for this user.",
+)
+async def rename_brd(
+    brd_id: int,
+    payload: BrdRenameRequest,
+    current_user: User = Depends(get_current_user),
+    brd_service: BrdService = Depends(get_brd_service),
+) -> BrdDetailResponse:
+    return await brd_service.rename_brd(current_user.id, brd_id, payload.name)
 
 
 @router.delete(
