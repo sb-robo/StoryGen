@@ -8,6 +8,8 @@ from app.db.models.user import User
 from app.db.session import async_session_local
 from app.repositories.auth_repository import AuthRepository
 from app.services.auth_service import AuthService
+from app.services.brd import BrdService
+from app.services.operations import OperationService
 from app.services.user_service import UserService
 from app.utils.jwt_handler import decode_token
 
@@ -30,6 +32,14 @@ def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
+
+
+def get_brd_service(db: AsyncSession = Depends(get_db)) -> BrdService:
+    return BrdService(db)
+
+
+def get_operation_service(db: AsyncSession = Depends(get_db)) -> OperationService:
+    return OperationService(db)
 
 
 async def get_current_user(
