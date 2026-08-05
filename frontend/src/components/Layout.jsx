@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { JobsButton, JobsDrawer } from './JobsDrawer'
+import { ToastStack } from './ToastStack'
 
 export function Layout({ children }) {
   const { user, logout } = useAuth()
@@ -12,6 +14,7 @@ export function Layout({ children }) {
         </Link>
         {user && (
           <div className="header-actions">
+            <JobsButton />
             <span className="user-label">{user.name}</span>
             <button type="button" className="btn btn-ghost" onClick={logout}>
               Log out
@@ -19,7 +22,9 @@ export function Layout({ children }) {
           </div>
         )}
       </header>
-      <main className="app-main">{children}</main>
+      <main className="app-main app-main-wide">{children}</main>
+      <JobsDrawer />
+      <ToastStack />
     </div>
   )
 }

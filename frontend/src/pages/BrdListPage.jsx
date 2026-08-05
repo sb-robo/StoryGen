@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as brdApi from '../api/brds'
-import { OperationBanner } from '../components/OperationBanner'
+import { BrdListProgress } from '../components/BrdListProgress'
 import { StatusBadge } from '../components/StatusBadge'
-import { useOperationPoll } from '../hooks/useOperationPoll'
+import { useJobs } from '../context/JobsContext'
 
 export function BrdListPage() {
   const [brds, setBrds] = useState([])
@@ -12,7 +12,7 @@ export function BrdListPage() {
   const [name, setName] = useState('')
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
-  const { operation, error: pollError, loading: polling, startPoll } = useOperationPoll()
+  const { trackJob, runningCount } = useJobs()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -38,7 +38,7 @@ export function BrdListPage() {
     setError('')
     try {
       const op = await brdApi.uploadBrd(name.trim(), file)
-      await startPoll(op)
+      await trackJob(op, { label: 'Parse BRD' })
       setName('')
       setFile(null)
       e.target.reset()
@@ -81,11 +81,10 @@ export function BrdListPage() {
               required
             />
           </label>
-          <button type="submit" className="btn btn-primary" disabled={uploading || polling}>
-            {uploading || polling ? 'Processing…' : 'Upload & parse'}
+          <button type="submit" className="btn btn-primary" disabled={uploading || runningCount > 0}>
+            {uploading || runningCount > 0 ? 'Processing…' : 'Upload & parse'}
           </button>
         </form>
-        <OperationBanner operation={operation} error={pollError} loading={polling} />
         {error && <p className="form-error">{error}</p>}
       </section>
 
@@ -101,6 +100,7 @@ export function BrdListPage() {
                   <div>
                     <strong>{brd.name}</strong>
                     <span className="meta">{brd.original_filename}</span>
+                    <BrdListProgress brdId={brd.id} brdStatus={brd.status} />
                   </div>
                   <StatusBadge status={brd.status} />
                 </Link>

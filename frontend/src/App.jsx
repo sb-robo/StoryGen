@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
+import { JobsProvider } from './context/JobsContext'
 import { GuestRoute, ProtectedRoute } from './auth/ProtectedRoute'
 import { Layout } from './components/Layout'
 import { BrdDetailPage } from './pages/BrdDetailPage'
@@ -10,6 +11,7 @@ import { RegisterPage } from './pages/RegisterPage'
 export default function App() {
   return (
     <AuthProvider>
+      <JobsProvider>
       <BrowserRouter>
         <Routes>
           <Route
@@ -51,6 +53,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </JobsProvider>
     </AuthProvider>
   )
 }
