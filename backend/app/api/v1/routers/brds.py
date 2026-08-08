@@ -381,21 +381,25 @@ async def get_pipeline_summary(
     description=(
         "Deterministic export of approved pipeline output. "
         "`format=csv` — StoryGen CSV. "
-        "`format=jira` — Jira CSV importer file (one Story row per approved story)."
+        "`format=jira` — Jira CSV importer file (one Story row per approved story). "
+        "`format=markdown` — stakeholder Markdown pack."
     ),
     responses={
         200: {
-            "content": {"text/csv": {}},
-            "description": "CSV download of approved stories (+ approved test cases)",
+            "content": {
+                "text/csv": {},
+                "text/markdown": {},
+            },
+            "description": "Download of approved stories (+ approved test cases)",
         },
         409: {"description": "No approved stories to export"},
     },
 )
 async def export_brd(
     brd_id: int,
-    format: Literal["csv", "jira"] = Query(
+    format: Literal["csv", "jira", "markdown"] = Query(
         "csv",
-        description="Export format: `csv` (StoryGen) or `jira` (Jira import CSV).",
+        description="Export format: `csv`, `jira`, or `markdown`.",
     ),
     current_user: User = Depends(get_current_user),
     export_service: ExportService = Depends(get_export_service),

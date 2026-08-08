@@ -11,6 +11,7 @@ const STATUS_CLASSES = {
   running: 'running',
   succeeded: 'success',
   failed: 'error',
+  cancelled: 'neutral',
 }
 
 export function StatusBadge({ status }) {

@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
+from app.db.models.user import User
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.feature_schema import FeatureExtractionResultResponse
 from app.schemas.operation_schema import (
@@ -284,10 +285,24 @@ class OperationService:
             result=brd_detail.model_dump(mode="json"),
         )
 
+    async def _resolve_operation_for_actor(
+        self, user: User, operation_id: str
+    ) -> AsyncOperation:
+        """Owners see their ops; admins can act on any operation."""
+        if user.is_admin:
+            operation = await self.repo.get_by_id(operation_id)
+            if not operation:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Operation not found",
+                )
+            return operation
+        return await self._get_owned_operation(user.id, operation_id)
+
     async def cancel_operation(
-        self, user_id: int, operation_id: str
+        self, user: User, operation_id: str
     ) -> OperationResponse:
-        operation = await self._get_owned_operation(user_id, operation_id)
+        operation = await self._resolve_operation_for_actor(user, operation_id)
         if operation.status not in {
             OperationStatus.PENDING.value,
             OperationStatus.RUNNING.value,
@@ -298,16 +313,17 @@ class OperationService:
             )
         operation = await self.repo.mark_cancelled(operation)
         await self.db.commit()
-        return self._to_response(operation)
+        return self._to_response(operation, include_user_id=user.is_admin)
 
     async def retry_operation(
-        self, user_id: int, operation_id: str
+        self, user: User, operation_id: str
     ) -> OperationResponse:
         """
         Enqueue a fresh operation for the same type/resource as a failed/cancelled one.
         Caller must schedule the matching background task.
+        Retries run as the original owner (admins may retry other users' ops).
         """
-        operation = await self._get_owned_operation(user_id, operation_id)
+        operation = await self._resolve_operation_for_actor(user, operation_id)
         if operation.status not in {
             OperationStatus.FAILED.value,
             OperationStatus.CANCELLED.value,
@@ -322,28 +338,31 @@ class OperationService:
                 detail="Operation has no resource to retry against.",
             )
 
+        owner_id = operation.user_id
         op_type = operation.operation_type
         resource_id = operation.resource_id
 
         if op_type == OperationType.FEATURE_EXTRACTION.value:
-            return await self.feature_service.enqueue_extraction(user_id, resource_id)
+            return await self.feature_service.enqueue_extraction(owner_id, resource_id)
         if op_type == OperationType.SUB_FEATURE_GENERATION.value:
             return await self.sub_feature_service.enqueue_generation(
-                user_id, resource_id
+                owner_id, resource_id
             )
         if op_type == OperationType.STORY_GENERATION.value:
-            return await self.story_service.enqueue_generation(user_id, resource_id)
+            return await self.story_service.enqueue_generation(owner_id, resource_id)
         if op_type == OperationType.STORY_POINT_ESTIMATION.value:
             return await self.story_points_service.enqueue_estimation(
-                user_id, resource_id
+                owner_id, resource_id
             )
         if op_type == OperationType.TEST_CASE_GENERATION.value:
-            return await self.test_case_service.enqueue_generation(user_id, resource_id)
+            return await self.test_case_service.enqueue_generation(
+                owner_id, resource_id
+            )
         if op_type in {
             OperationType.BRD_UPLOAD.value,
             OperationType.BRD_REPARSE.value,
         }:
-            return await self.brd_service.enqueue_reparse(user_id, resource_id)
+            return await self.brd_service.enqueue_reparse(owner_id, resource_id)
 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

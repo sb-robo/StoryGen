@@ -14,6 +14,11 @@ export function Layout({ children }) {
         </Link>
         {user && (
           <div className="header-actions">
+            {user.is_admin && (
+              <Link to="/admin/operations" className="btn btn-ghost">
+                Ops
+              </Link>
+            )}
             <JobsButton />
             <Link to="/profile" className="user-label" title="Profile">
               {user.name}

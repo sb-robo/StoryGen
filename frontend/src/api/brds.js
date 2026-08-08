@@ -99,3 +99,8 @@ export function exportBrdCsv(brdId) {
 export function exportBrdJira(brdId) {
   return downloadExport(brdId, 'jira')
 }
+
+/** Download stakeholder Markdown pack of approved stories + tests. */
+export function exportBrdMarkdown(brdId) {
+  return downloadExport(brdId, 'markdown')
+}

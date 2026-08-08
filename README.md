@@ -102,7 +102,8 @@ Set `VITE_API_ORIGIN` if the API is not on the same host (defaults to relative `
 ## Auth notes
 
 - Register / login / refresh / logout are implemented.
-- Forgot password returns a `reset_token` only when `DEBUG=true` (no email sender yet). Use that token on `/reset-password`.
+- Forgot password sends a reset email when `SMTP_HOST` is set (link uses `FRONTEND_BASE_URL`). With `DEBUG=true` and no SMTP, the reset link is logged and `reset_token` is returned in the API response for `/reset-password`.
+- Admins see **Ops** in the header (`/admin/operations`) for cross-user async job cancel/retry.
 - With `AUTH_DISABLED=true` and `DEBUG=true`, Bearer auth is bypassed for local convenience — do not use in production.
 
 ## AI pipeline flow
@@ -122,6 +123,15 @@ BRD upload & parse
 ```bash
 uv run pytest
 ```
+
+## Demo seed (local)
+
+```bash
+PYTHONPATH=backend uv run python backend/scripts/seed_demo.py
+```
+
+Creates `demo@storygen.local` / `demo12345` and a **Sample Payments BRD** with a small approved pipeline (plus one pending feature). Sample Markdown also lives at `backend/samples/sample_brd.md`.
+
 
 ## Best practices
 

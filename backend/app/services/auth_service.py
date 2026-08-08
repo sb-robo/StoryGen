@@ -17,6 +17,7 @@ from app.schemas.auth_schema import (
     UserRegisterRequest,
 )
 from app.schemas.user_schema import UserResponse
+from app.services.email_service import send_password_reset_email
 from app.utils.jwt_handler import create_access_token, create_refresh_token, decode_token
 from app.utils.password_handler import hash_password, verify_password
 from app.utils.token_hash import hash_token
@@ -117,6 +118,12 @@ class AuthService:
             minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES
         )
         await self.reset_repo.create(user.id, hash_token(raw_token), expires_at)
+
+        try:
+            await send_password_reset_email(to_email=user.email, reset_token=raw_token)
+        except Exception:
+            # Never leak whether the account exists; DEBUG still returns the token.
+            pass
 
         return ForgotPasswordResponse(
             message=message,

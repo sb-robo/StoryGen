@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import * as brdApi from '../api/brds'
 import { useJobs } from '../context/JobsContext'
 import { useBrdPipeline } from '../hooks/useBrdPipeline'
@@ -13,6 +14,10 @@ import {
   regenerateConfirmMessage,
 } from '../utils/pipeline'
 import {
+  hydratePipelineSettings,
+  serializePipelineSettings,
+} from '../utils/pipelineSettings'
+import {
   approveQueueItem,
   approveQueueItems,
   filterReviewQueue,
@@ -20,10 +25,12 @@ import {
   queueItemKey,
   rejectQueueItem,
 } from '../utils/reviewActions'
+import { resolveJobFocusTarget } from '../utils/jobFocus'
 import { ConfirmModal } from './ConfirmModal'
 import { DetailPanel } from './DetailPanel'
 import { OverviewTab } from './OverviewTab'
 import { ParsedContentModal } from './ParsedContentModal'
+import { PipelineSettingsForm } from './PipelineSettingsForm'
 import { PipelineStepper } from './PipelineStepper'
 import { ReviewQueue } from './ReviewQueue'
 import { StatusBadge } from './StatusBadge'
@@ -31,7 +38,9 @@ import { TreeSidebar } from './TreeSidebar'
 
 export function BrdWorkspace({ brd, onRefreshBrd }) {
   const brdId = brd.id
-  const { trackJob, jobs } = useJobs()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { trackJob, jobs, jobFocus, clearJobFocus } = useJobs()
   const {
     features,
     subFeatures,
@@ -60,6 +69,36 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   const [regenConfirm, setRegenConfirm] = useState(null)
   const [pendingSelectKey, setPendingSelectKey] = useState(null)
   const [editRequestKey, setEditRequestKey] = useState(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState(() => hydratePipelineSettings(brd.pipeline_settings))
+  const [settingsStatus, setSettingsStatus] = useState('')
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [isNarrow, setIsNarrow] = useState(false)
+
+  useEffect(() => {
+    setSettings(hydratePipelineSettings(brd.pipeline_settings))
+  }, [brd.id, brd.pipeline_settings])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined
+    const mq = window.matchMedia('(max-width: 768px)')
+    const apply = () => {
+      const narrow = mq.matches
+      setIsNarrow(narrow)
+      if (narrow) setTreeOpen(false)
+    }
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
+  const selectItem = useCallback(
+    (item) => {
+      setSelectedItem(item)
+      if (isNarrow) setTreeOpen(false)
+    },
+    [isNarrow],
+  )
 
   // Reset selection when navigating to a different BRD, and auto-select the
   // first feature the first time features become available for a BRD, so the
@@ -97,6 +136,42 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     setPendingSelectKey(null)
     if (found || reviewQueue.length > 0) setWorkspaceTab('queue')
   }, [pendingSelectKey, reviewQueue, loading])
+
+  // Jobs drawer click-through: focus the affected item when pipeline data is ready.
+  useEffect(() => {
+    const focus = jobFocus || location.state?.jobFocus
+    if (!focus || loading) return
+    const targetBrdId = focus.brdId ?? (focus.resourceType === 'brd' ? focus.resourceId : null)
+    if (targetBrdId != null && Number(targetBrdId) !== Number(brdId)) return
+
+    const target = resolveJobFocusTarget(focus, {
+      features: features ?? [],
+      subFeatures: subFeatures ?? [],
+      stories: stories ?? [],
+      testCases: testCases ?? [],
+      reviewQueue,
+    })
+    if (target.tab) setWorkspaceTab(target.tab)
+    if (target.queueFilter) setQueueFilter(target.queueFilter)
+    if (target.item) setSelectedItem(target.item)
+    clearJobFocus?.()
+    if (location.state?.jobFocus) {
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [
+    jobFocus,
+    location.state,
+    location.pathname,
+    loading,
+    brdId,
+    features,
+    subFeatures,
+    stories,
+    testCases,
+    reviewQueue,
+    clearJobFocus,
+    navigate,
+  ])
 
   // Keep the detail panel's entity in sync after approve/reject/reopen reloads.
   useEffect(() => {
@@ -159,6 +234,25 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     await onRefreshBrd?.()
   }
 
+  async function handleSaveSettings(e) {
+    e.preventDefault()
+    setSavingSettings(true)
+    setSettingsStatus('')
+    try {
+      const updated = await brdApi.updatePipelineSettings(
+        brdId,
+        serializePipelineSettings(settings),
+      )
+      setSettings(hydratePipelineSettings(updated.pipeline_settings))
+      setSettingsStatus('Preferences saved. They apply on the next generate/extract run.')
+      await onRefreshBrd?.()
+    } catch (err) {
+      setSettingsStatus(err.message || 'Failed to save preferences')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
   async function handleViewFullContent() {
     setShowContentModal(true)
     if (brd.parsed_text != null || fullContent != null) return
@@ -192,6 +286,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     setBusy(true)
     try {
       if (format === 'jira') await brdApi.exportBrdJira(brdId)
+      else if (format === 'markdown') await brdApi.exportBrdMarkdown(brdId)
       else await brdApi.exportBrdCsv(brdId)
     } finally {
       setBusy(false)
@@ -252,11 +347,14 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     [reload, onRefreshBrd, reviewQueue, queueFilter, parentFilter],
   )
 
-  const handleEditItem = useCallback((item) => {
-    if (!item || item.type === ITEM_TYPES.POINTS) return
-    setSelectedItem(item)
-    setEditRequestKey(queueItemKey(item))
-  }, [])
+  const handleEditItem = useCallback(
+    (item) => {
+      if (!item || item.type === ITEM_TYPES.POINTS) return
+      selectItem(item)
+      setEditRequestKey(queueItemKey(item))
+    },
+    [selectItem],
+  )
 
   async function handleBulkApprove(items) {
     if (!items?.length || busy) return
@@ -294,7 +392,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     typeFilter: queueFilter,
     parentFilter,
     selectedItem,
-    onSelect: setSelectedItem,
+    onSelect: selectItem,
     onApprove: handleApproveItem,
     onReject: handleRejectItem,
     onEdit: handleEditItem,
@@ -308,6 +406,10 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     }
     if (actionId === 'export_jira') {
       await handleExport('jira')
+      return
+    }
+    if (actionId === 'export_markdown') {
+      await handleExport('markdown')
       return
     }
     setBusy(true)
@@ -343,7 +445,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       if (featurePending > 0) {
         setWorkspaceTab('queue')
         const first = reviewQueue.find((i) => i.type === 'feature') ?? reviewQueue[0]
-        if (first) setSelectedItem(first)
+        if (first) selectItem(first)
       } else {
         await handleBatchAction('extract_features')
       }
@@ -356,7 +458,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       } else {
         setWorkspaceTab('queue')
         const first = reviewQueue.find((i) => i.type === 'sub_feature')
-        if (first) setSelectedItem(first)
+        if (first) selectItem(first)
       }
       return
     }
@@ -367,7 +469,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       } else {
         setWorkspaceTab('queue')
         const first = reviewQueue.find((i) => i.type === 'story')
-        if (first) setSelectedItem(first)
+        if (first) selectItem(first)
       }
       return
     }
@@ -378,7 +480,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       } else {
         setWorkspaceTab('queue')
         const first = reviewQueue.find((i) => i.type === 'test_case')
-        if (first) setSelectedItem(first)
+        if (first) selectItem(first)
       }
       return
     }
@@ -389,7 +491,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       } else {
         setWorkspaceTab('queue')
         const first = reviewQueue.find((i) => i.type === 'points')
-        if (first) setSelectedItem(first)
+        if (first) selectItem(first)
       }
       return
     }
@@ -402,11 +504,21 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   function handleSuggestedAction(step) {
     if (step.action === 'review') {
       setWorkspaceTab('queue')
-      if (reviewQueue[0]) setSelectedItem(reviewQueue[0])
+      if (reviewQueue[0]) selectItem(reviewQueue[0])
       return
     }
-    if (step.action === 'export_csv' || step.action === 'export_jira') {
-      handleExport(step.action === 'export_jira' ? 'jira' : 'csv')
+    if (
+      step.action === 'export_csv' ||
+      step.action === 'export_jira' ||
+      step.action === 'export_markdown'
+    ) {
+      const format =
+        step.action === 'export_jira'
+          ? 'jira'
+          : step.action === 'export_markdown'
+            ? 'markdown'
+            : 'csv'
+      handleExport(format)
       return
     }
     if (step.action) {
@@ -433,8 +545,37 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
           {reviewQueue.length > 0 && (
             <span className="pending-badge">{reviewQueue.length} pending review</span>
           )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowSettings((v) => !v)}
+          >
+            {showSettings ? 'Hide preferences' : 'Generation preferences'}
+          </button>
         </div>
       </div>
+
+      {showSettings && (
+        <section className="panel">
+          <h2>Generation preferences</h2>
+          <p className="empty-hint">
+            Changes apply the next time you extract or generate — they do not rewrite approved items.
+          </p>
+          <form onSubmit={handleSaveSettings}>
+            <PipelineSettingsForm settings={settings} onChange={setSettings} />
+            <div className="upload-form-actions" style={{ marginTop: '1rem' }}>
+              <button type="submit" className="btn btn-primary" disabled={savingSettings}>
+                {savingSettings ? 'Saving…' : 'Save preferences'}
+              </button>
+            </div>
+            {settingsStatus && (
+              <p className={settingsStatus.includes('saved') ? 'form-success' : 'form-error'}>
+                {settingsStatus}
+              </p>
+            )}
+          </form>
+        </section>
+      )}
 
       {(brd.preview || brd.parsed_text) && (
         <section className="panel parsed-content-panel">
@@ -522,20 +663,34 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
             </button>
           </div>
 
-          <div className={`workspace-split ${detailInMiddle ? 'workspace-split-detail-first' : ''}`}>
+          <div
+            className={`workspace-split ${detailInMiddle ? 'workspace-split-detail-first' : ''} ${
+              isNarrow && selectedItem ? 'workspace-split-mobile-detail' : ''
+            }`}
+          >
             {treeOpen && (
-              <TreeSidebar
-                features={features ?? []}
-                subFeatures={subFeatures ?? []}
-                stories={stories ?? []}
-                testCases={testCases ?? []}
-                selectedItem={selectedItem}
-                onSelect={setSelectedItem}
-                onClose={() => setTreeOpen(false)}
-              />
+              <>
+                {isNarrow && (
+                  <button
+                    type="button"
+                    className="workspace-sheet-backdrop"
+                    aria-label="Close structure"
+                    onClick={() => setTreeOpen(false)}
+                  />
+                )}
+                <TreeSidebar
+                  features={features ?? []}
+                  subFeatures={subFeatures ?? []}
+                  stories={stories ?? []}
+                  testCases={testCases ?? []}
+                  selectedItem={selectedItem}
+                  onSelect={selectItem}
+                  onClose={() => setTreeOpen(false)}
+                />
+              </>
             )}
 
-            <div className={`workspace-main ${detailInMiddle ? 'workspace-main-compact' : ''}`}>
+            <div className={`workspace-main ${detailInMiddle && !isNarrow ? 'workspace-main-compact' : ''}`}>
               {workspaceTab === 'overview' && (
                 <OverviewTab
                   pipeline={pipeline}
@@ -548,7 +703,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                   busy={busy || loading}
                   onGoToQueue={() => {
                     setWorkspaceTab('queue')
-                    if (reviewQueue[0]) setSelectedItem(reviewQueue[0])
+                    if (reviewQueue[0]) selectItem(reviewQueue[0])
                   }}
                   onSuggestedAction={handleSuggestedAction}
                   onBatchAction={handleBatchAction}
@@ -559,7 +714,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                 <ReviewQueue
                   items={reviewQueue}
                   selectedItem={selectedItem}
-                  onSelect={setSelectedItem}
+                  onSelect={selectItem}
                   filter={queueFilter}
                   onFilterChange={setQueueFilter}
                   parentFilter={parentFilter}
@@ -572,20 +727,30 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
             </div>
 
             {selectedItem && (
-              <DetailPanel
-                item={selectedItem}
-                busy={busy}
-                onClose={() => setSelectedItem(null)}
-                onRefresh={refreshAll}
-                onSelectItem={setSelectedItem}
-                onRunJob={handleRunJob}
-                onApprove={() => handleApproveItem(selectedItem)}
-                onReject={() => handleRejectItem(selectedItem)}
-                editRequestKey={editRequestKey}
-                onEditRequestHandled={() => setEditRequestKey(null)}
-                parents={parents}
-                wide={detailInMiddle}
-              />
+              <>
+                {isNarrow && (
+                  <button
+                    type="button"
+                    className="workspace-sheet-backdrop"
+                    aria-label="Close detail"
+                    onClick={() => setSelectedItem(null)}
+                  />
+                )}
+                <DetailPanel
+                  item={selectedItem}
+                  busy={busy}
+                  onClose={() => setSelectedItem(null)}
+                  onRefresh={refreshAll}
+                  onSelectItem={selectItem}
+                  onRunJob={handleRunJob}
+                  onApprove={() => handleApproveItem(selectedItem)}
+                  onReject={() => handleRejectItem(selectedItem)}
+                  editRequestKey={editRequestKey}
+                  onEditRequestHandled={() => setEditRequestKey(null)}
+                  parents={parents}
+                  wide={detailInMiddle && !isNarrow}
+                />
+              </>
             )}
           </div>
         </>

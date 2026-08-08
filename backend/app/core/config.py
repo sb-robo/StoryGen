@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     FIRST_ADMIN_EMAIL: str | None = None
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
     DEBUG: bool = False
     AUTH_DISABLED: bool = False
     DEV_USER_EMAIL: str | None = None
@@ -38,6 +39,13 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 3
     LLM_TIMEOUT_SECONDS: int = 120
     LLM_MAX_ITERATIONS: int = 2
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str | None = None
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
 
     @field_validator(
         "OPENAI_API_KEY",
@@ -79,6 +87,10 @@ class Settings(BaseSettings):
     def auth_disabled(self) -> bool:
         """Auth bypass is only honored when DEBUG is also enabled."""
         return self.AUTH_DISABLED and self.DEBUG
+
+    @property
+    def smtp_is_configured(self) -> bool:
+        return bool((self.SMTP_HOST or "").strip())
 
     @property
     def brd_storage_path(self) -> Path:

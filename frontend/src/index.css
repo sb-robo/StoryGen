@@ -532,6 +532,89 @@ button:focus-visible,
   justify-content: flex-start;
 }
 
+.admin-ops-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.admin-ops-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-ops-panel {
+  overflow: hidden;
+}
+
+.admin-ops-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.admin-ops-table th,
+.admin-ops-table td {
+  text-align: left;
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.admin-ops-table th {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-ops-type {
+  display: block;
+  text-transform: capitalize;
+}
+
+.admin-ops-id {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.admin-ops-when {
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
+.admin-ops-error {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.admin-ops-actions {
+  white-space: nowrap;
+}
+
+.admin-ops-actions .btn {
+  margin-right: 0.25rem;
+}
+
+.admin-ops-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
 .error-boundary {
   padding: 1.5rem;
 }
@@ -1143,6 +1226,28 @@ button:focus-visible,
 .job-item-body strong {
   font-size: 0.875rem;
   color: var(--text-h);
+}
+
+.job-item-link {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.job-item-link:hover strong {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.job-item-hint {
+  font-size: 0.75rem;
+  opacity: 0.75;
 }
 
 .job-icon {
@@ -2290,6 +2395,100 @@ button:focus-visible,
   min-width: 160px;
 }
 
+.workspace-sheet-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .workspace-split {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .workspace-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: rgba(21, 32, 43, 0.35);
+    z-index: 240;
+  }
+
+  .tree-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: min(75vh, 100%);
+    resize: none;
+    z-index: 250;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -8px 28px rgba(21, 32, 43, 0.18);
+  }
+
+  .detail-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: min(85vh, 100%);
+    z-index: 250;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -8px 28px rgba(21, 32, 43, 0.18);
+  }
+
+  .workspace-main-compact {
+    flex: 1 1 100%;
+    width: 100%;
+    max-height: none;
+  }
+
+  .workspace-tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .workspace-tabs-row {
+    gap: 0.5rem;
+  }
+
+  .queue-shortcuts-hint {
+    display: none;
+  }
+
+  .queue-path-col,
+  .queue-conf-col {
+    display: none;
+  }
+
+  .queue-table {
+    min-width: 0;
+  }
+
+  .queue-title-col {
+    width: auto;
+  }
+
+  .detail-panel-header,
+  .detail-panel-body,
+  .detail-panel-footer,
+  .detail-panel-toolbar {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .detail-actions .btn,
+  .detail-panel-footer .btn {
+    min-height: 2.5rem;
+  }
+}
+
 @media (max-width: 640px) {
   .app-main {
     padding: 1rem;
@@ -2297,28 +2496,6 @@ button:focus-visible,
 
   .app-main-wide {
     max-width: 100%;
-  }
-
-  .workspace-split {
-    flex-direction: column;
-  }
-
-  .tree-sidebar {
-    width: 100%;
-    max-width: 100%;
-    max-height: 40vh;
-    resize: none;
-  }
-
-  .detail-panel {
-    width: 100%;
-    max-height: 50vh;
-  }
-
-  .workspace-main-compact {
-    flex: 1 1 100%;
-    width: 100%;
-    max-height: none;
   }
 
   .pipeline-stepper {
@@ -2395,6 +2572,10 @@ button:focus-visible,
 
   .profile-form {
     max-width: 100%;
+  }
+
+  .admin-ops-error {
+    max-width: 140px;
   }
 }
 

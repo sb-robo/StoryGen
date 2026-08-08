@@ -58,3 +58,18 @@ export function serializePipelineSettings(settings) {
   }
   return out
 }
+
+/** Normalize API/settings payload into controlled form state. */
+export function hydratePipelineSettings(raw) {
+  return {
+    ...DEFAULT_PIPELINE_SETTINGS,
+    ...(raw || {}),
+    instructions: raw?.instructions ?? '',
+    domain_context: raw?.domain_context ?? '',
+    in_scope: raw?.in_scope ?? '',
+    out_of_scope: raw?.out_of_scope ?? '',
+    personas: raw?.personas ?? '',
+    export_project_key: raw?.export_project_key ?? '',
+    export_epic_prefix: raw?.export_epic_prefix ?? '',
+  }
+}

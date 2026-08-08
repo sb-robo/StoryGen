@@ -30,7 +30,9 @@ export function ForgotPasswordPage() {
     <div className="auth-page">
       <div className="auth-card">
         <h1>Forgot password</h1>
-        <p className="auth-subtitle">We will send a reset token if the account exists</p>
+        <p className="auth-subtitle">
+          If an account exists for that email, we send a reset link (when email is configured).
+        </p>
         <form onSubmit={handleSubmit}>
           <label className="field">
             <span>Email</span>

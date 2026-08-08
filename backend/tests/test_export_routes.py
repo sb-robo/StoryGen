@@ -95,6 +95,23 @@ def test_export_jira_returns_file_download(client, mock_export_service):
     mock_export_service.export_brd.assert_awaited_once_with(1, 1, format="jira")
 
 
+def test_export_markdown_returns_file_download(client, mock_export_service):
+    mock_export_service.export_brd = AsyncMock(
+        return_value=ExportFile(
+            content=b"# Payments BRD\n\n## Feature: Auth\n",
+            filename="payments-brd-export.md",
+            media_type="text/markdown; charset=utf-8",
+        )
+    )
+
+    response = client.post("/api/v1/brds/1/export?format=markdown")
+
+    assert response.status_code == 200
+    assert "text/markdown" in response.headers["content-type"]
+    assert "payments-brd-export.md" in response.headers["content-disposition"]
+    mock_export_service.export_brd.assert_awaited_once_with(1, 1, format="markdown")
+
+
 def test_export_propagates_not_found(client, mock_export_service):
     mock_export_service.export_brd = AsyncMock(
         side_effect=HTTPException(status_code=404, detail="BRD not found")

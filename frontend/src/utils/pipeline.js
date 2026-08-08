@@ -462,6 +462,12 @@ export function getBatchActions({ pipeline, features, subFeatures, stories, test
       count: approvedStories.length,
       detail: exportReadinessLabel({ approvedStories: approvedStories.length, approvedTests }),
     })
+    actions.push({
+      id: 'export_markdown',
+      label: 'Export Markdown',
+      count: approvedStories.length,
+      detail: exportReadinessLabel({ approvedStories: approvedStories.length, approvedTests }),
+    })
   }
 
   return actions

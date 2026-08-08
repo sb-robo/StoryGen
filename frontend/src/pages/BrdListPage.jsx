@@ -5,13 +5,9 @@ import { BrdListProgress } from '../components/BrdListProgress'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { StatusBadge } from '../components/StatusBadge'
 import { useJobs } from '../context/JobsContext'
+import { PipelineSettingsForm } from '../components/PipelineSettingsForm'
 import {
   DEFAULT_PIPELINE_SETTINGS,
-  FEATURE_COUNT_OPTIONS,
-  POINTING_SCALE_OPTIONS,
-  STORY_STYLE_OPTIONS,
-  SUB_FEATURE_COUNT_OPTIONS,
-  TEST_DEPTH_OPTIONS,
   serializePipelineSettings,
 } from '../utils/pipelineSettings'
 
@@ -42,10 +38,6 @@ export function BrdListPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState(DEFAULT_PIPELINE_SETTINGS)
   const { trackJob, runningCount } = useJobs()
-
-  function updateSetting(key, value) {
-    setSettings((prev) => ({ ...prev, [key]: value }))
-  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,7 +97,10 @@ export function BrdListPage() {
     setError('')
     try {
       const op = await brdApi.uploadBrd(name.trim(), file, serializePipelineSettings(settings))
-      await trackJob(op, { label: 'Parse BRD' })
+      await trackJob(op, {
+        label: 'Parse BRD',
+        brdId: op.resource_id ?? null,
+      })
       setName('')
       setFile(null)
       setSettings(DEFAULT_PIPELINE_SETTINGS)
@@ -199,150 +194,7 @@ export function BrdListPage() {
             </div>
 
             {showSettings && (
-              <div className="pipeline-settings">
-                <label className="field">
-                  <span>Instructions for AI</span>
-                  <textarea
-                    value={settings.instructions}
-                    onChange={(e) => updateSetting('instructions', e.target.value)}
-                    placeholder="e.g. Ignore legal appendix. Focus on customer portal. Treat payments as out of scope."
-                    rows={3}
-                  />
-                </label>
-
-                <div className="pipeline-settings-grid">
-                  <label className="field">
-                    <span>Domain / product</span>
-                    <input
-                      type="text"
-                      value={settings.domain_context}
-                      onChange={(e) => updateSetting('domain_context', e.target.value)}
-                      placeholder="B2B SaaS billing for SMBs"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Personas / roles</span>
-                    <input
-                      type="text"
-                      value={settings.personas}
-                      onChange={(e) => updateSetting('personas', e.target.value)}
-                      placeholder="Admin, Merchant, End customer"
-                    />
-                  </label>
-                </div>
-
-                <div className="pipeline-settings-grid">
-                  <label className="field">
-                    <span>In scope</span>
-                    <textarea
-                      value={settings.in_scope}
-                      onChange={(e) => updateSetting('in_scope', e.target.value)}
-                      placeholder="Must cover auth, reporting, notifications…"
-                      rows={2}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Out of scope</span>
-                    <textarea
-                      value={settings.out_of_scope}
-                      onChange={(e) => updateSetting('out_of_scope', e.target.value)}
-                      placeholder="Mobile app, third-party marketplace…"
-                      rows={2}
-                    />
-                  </label>
-                </div>
-
-                <div className="pipeline-settings-grid">
-                  <label className="field">
-                    <span>Feature count</span>
-                    <select
-                      value={settings.feature_count}
-                      onChange={(e) => updateSetting('feature_count', e.target.value)}
-                    >
-                      {FEATURE_COUNT_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Sub-feature count</span>
-                    <select
-                      value={settings.sub_feature_count}
-                      onChange={(e) => updateSetting('sub_feature_count', e.target.value)}
-                    >
-                      {SUB_FEATURE_COUNT_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Story style</span>
-                    <select
-                      value={settings.story_style}
-                      onChange={(e) => updateSetting('story_style', e.target.value)}
-                    >
-                      {STORY_STYLE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Pointing scale</span>
-                    <select
-                      value={settings.pointing_scale}
-                      onChange={(e) => updateSetting('pointing_scale', e.target.value)}
-                    >
-                      {POINTING_SCALE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Test depth</span>
-                    <select
-                      value={settings.test_depth}
-                      onChange={(e) => updateSetting('test_depth', e.target.value)}
-                    >
-                      {TEST_DEPTH_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="pipeline-settings-grid">
-                  <label className="field">
-                    <span>Jira project key (export)</span>
-                    <input
-                      type="text"
-                      value={settings.export_project_key}
-                      onChange={(e) => updateSetting('export_project_key', e.target.value)}
-                      placeholder="PAY"
-                      maxLength={32}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Epic name prefix (export)</span>
-                    <input
-                      type="text"
-                      value={settings.export_epic_prefix}
-                      onChange={(e) => updateSetting('export_epic_prefix', e.target.value)}
-                      placeholder="Payments —"
-                      maxLength={64}
-                    />
-                  </label>
-                </div>
-              </div>
+              <PipelineSettingsForm settings={settings} onChange={setSettings} />
             )}
 
             <div className="upload-form-actions">

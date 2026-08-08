@@ -131,7 +131,7 @@ async def cancel_operation(
     current_user: User = Depends(get_current_user),
     operation_service: OperationService = Depends(get_operation_service),
 ) -> OperationResponse:
-    return await operation_service.cancel_operation(current_user.id, operation_id)
+    return await operation_service.cancel_operation(current_user, operation_id)
 
 
 @router.post(
@@ -147,7 +147,7 @@ async def retry_operation(
     current_user: User = Depends(get_current_user),
     operation_service: OperationService = Depends(get_operation_service),
 ) -> OperationResponse:
-    new_op = await operation_service.retry_operation(current_user.id, operation_id)
+    new_op = await operation_service.retry_operation(current_user, operation_id)
     task = _RETRY_TASKS.get(new_op.operation_type)
     if task is None:
         return new_op

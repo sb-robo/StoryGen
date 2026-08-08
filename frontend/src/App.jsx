@@ -4,6 +4,7 @@ import { JobsProvider } from './context/JobsContext'
 import { GuestRoute, ProtectedRoute } from './auth/ProtectedRoute'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
+import { AdminOperationsPage } from './pages/AdminOperationsPage'
 import { BrdDetailPage } from './pages/BrdDetailPage'
 import { BrdListPage } from './pages/BrdListPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -77,6 +78,18 @@ export default function App() {
                     <Layout>
                       <ErrorBoundary title="Could not load your profile">
                         <ProfilePage />
+                      </ErrorBoundary>
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/operations"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <ErrorBoundary title="Could not load operations">
+                        <AdminOperationsPage />
                       </ErrorBoundary>
                     </Layout>
                   </ProtectedRoute>

@@ -36,6 +36,7 @@ def _feature(**overrides) -> BrdFeature:
     feature = MagicMock(spec=BrdFeature)
     feature.id = 10
     feature.title = "Auth"
+    feature.description = "Authentication capabilities"
     for key, value in overrides.items():
         setattr(feature, key, value)
     return feature
@@ -45,6 +46,7 @@ def _sub_feature(**overrides) -> BrdSubFeature:
     sub = MagicMock(spec=BrdSubFeature)
     sub.id = 20
     sub.title = "Login"
+    sub.description = "Merchant login flow"
     for key, value in overrides.items():
         setattr(sub, key, value)
     return sub
@@ -153,7 +155,14 @@ async def test_export_rejects_when_no_approved_stories():
 @pytest.mark.asyncio
 async def test_export_jira_csv_one_row_per_story():
     service = _service()
-    service.brd_repo.get_by_id_for_user = AsyncMock(return_value=_brd())
+    service.brd_repo.get_by_id_for_user = AsyncMock(
+        return_value=_brd(
+            pipeline_settings={
+                "export_project_key": "PAY",
+                "export_epic_prefix": "Payments — ",
+            }
+        )
+    )
     service._load_approved_rows = AsyncMock(
         return_value=[
             ExportRow(
@@ -179,5 +188,33 @@ async def test_export_jira_csv_one_row_per_story():
     assert len(rows) == 1  # one Jira Story per approved story
     assert rows[0]["Summary"] == "As a user I can log in"
     assert rows[0]["Issue Type"] == "Story"
+    assert rows[0]["Project Key"] == "PAY"
+    assert rows[0]["Epic Name"] == "Payments — Auth"
     assert "Happy path login" in rows[0]["Description"]
     assert "Invalid login" in rows[0]["Description"]
+
+
+@pytest.mark.asyncio
+async def test_export_markdown_pack():
+    service = _service()
+    service.brd_repo.get_by_id_for_user = AsyncMock(return_value=_brd())
+    service._load_approved_rows = AsyncMock(
+        return_value=[
+            ExportRow(
+                feature=_feature(),
+                sub_feature=_sub_feature(),
+                story=_story(),
+                test_case=_test_case(),
+            ),
+        ]
+    )
+
+    result = await service.export_brd(user_id=1, brd_id=1, format="markdown")
+
+    assert result.filename == "payments-brd-export.md"
+    assert "text/markdown" in result.media_type
+    text = result.content.decode("utf-8")
+    assert "# Payments BRD" in text
+    assert "## Feature: Auth" in text
+    assert "#### Story: As a user I can log in" in text
+    assert "Happy path login" in text

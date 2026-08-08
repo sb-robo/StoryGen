@@ -15,8 +15,9 @@ from app.db.models.brd_sub_feature import BrdSubFeature
 from app.db.models.brd_test_case import BrdTestCase, TestCaseStatus
 from app.repositories.brd_repository import BrdRepository
 from app.repositories.story_repository import decode_acceptance_criteria
+from app.schemas.pipeline_settings_schema import parse_pipeline_settings
 
-ExportFormat = Literal["csv", "jira"]
+ExportFormat = Literal["csv", "jira", "markdown"]
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,13 @@ CSV_COLUMNS = [
 
 # Jira External System Import–style CSV (upload via Jira CSV importer).
 JIRA_COLUMNS = [
+    "Project Key",
     "Summary",
     "Issue Type",
     "Description",
     "Story Points",
     "Labels",
+    "Epic Name",
     "External ID",
 ]
 
@@ -78,10 +81,13 @@ class ExportService:
         *,
         format: ExportFormat = "csv",
     ) -> ExportFile:
-        if format not in {"csv", "jira"}:
+        if format not in {"csv", "jira", "markdown"}:
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=f"Export format '{format}' is not supported. Use format=csv or format=jira.",
+                detail=(
+                    f"Export format '{format}' is not supported. "
+                    "Use format=csv, format=jira, or format=markdown."
+                ),
             )
 
         brd = await self._get_owned_brd(user_id, brd_id)
@@ -98,6 +104,12 @@ class ExportService:
                 content=self._format_jira_csv(brd, rows),
                 filename=f"{safe_name}-jira-import.csv",
                 media_type="text/csv; charset=utf-8",
+            )
+        if format == "markdown":
+            return ExportFile(
+                content=self._format_markdown(brd, rows),
+                filename=f"{safe_name}-export.md",
+                media_type="text/markdown; charset=utf-8",
             )
 
         return ExportFile(
@@ -224,9 +236,19 @@ class ExportService:
                         ]
                     )
 
+            settings = parse_pipeline_settings(getattr(brd, "pipeline_settings", None))
+            project_key = settings.export_project_key or ""
+            epic_prefix = (settings.export_epic_prefix or "").strip()
+            epic_name = (
+                f"{epic_prefix} {first.feature.title}".strip()
+                if epic_prefix
+                else first.feature.title
+            )
+
             labels = _jira_labels(first.feature.title, first.sub_feature.title)
             writer.writerow(
                 {
+                    "Project Key": project_key,
                     "Summary": first.story.title,
                     "Issue Type": "Story",
                     "Description": "\n".join(description_parts).strip(),
@@ -234,11 +256,87 @@ class ExportService:
                     if first.story.story_points is not None
                     else "",
                     "Labels": labels,
+                    "Epic Name": epic_name,
                     "External ID": f"story-{first.story.id}",
                 }
             )
 
         return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+    def _format_markdown(self, brd: BrdDocument, rows: list[ExportRow]) -> bytes:
+        """Stakeholder-friendly Markdown pack of approved stories (+ tests)."""
+        by_feature: dict[int, dict] = {}
+        for row in rows:
+            feature_bucket = by_feature.setdefault(
+                row.feature.id,
+                {"feature": row.feature, "sub_features": {}},
+            )
+            sf_bucket = feature_bucket["sub_features"].setdefault(
+                row.sub_feature.id,
+                {"sub_feature": row.sub_feature, "stories": {}},
+            )
+            story_bucket = sf_bucket["stories"].setdefault(
+                row.story.id,
+                {"story": row.story, "test_cases": []},
+            )
+            if row.test_case is not None:
+                story_bucket["test_cases"].append(row.test_case)
+
+        lines: list[str] = [
+            f"# {brd.name}",
+            "",
+            "Approved delivery pack exported from StoryGen.",
+            "",
+        ]
+
+        for feature_bucket in by_feature.values():
+            feature = feature_bucket["feature"]
+            lines.extend([f"## Feature: {feature.title}", ""])
+            feature_desc = _as_text(feature.description)
+            if feature_desc:
+                lines.extend([feature_desc, ""])
+
+            for sf_bucket in feature_bucket["sub_features"].values():
+                sub = sf_bucket["sub_feature"]
+                lines.extend([f"### Sub-feature: {sub.title}", ""])
+                sub_desc = _as_text(sub.description)
+                if sub_desc:
+                    lines.extend([sub_desc, ""])
+
+                for story_bucket in sf_bucket["stories"].values():
+                    story = story_bucket["story"]
+                    lines.extend([f"#### Story: {story.title}", ""])
+                    story_desc = _as_text(story.description)
+                    if story_desc:
+                        lines.extend([story_desc, ""])
+                    if story.story_points is not None:
+                        lines.append(f"**Story points:** {story.story_points}")
+                        lines.append("")
+
+                    criteria = decode_acceptance_criteria(story.acceptance_criteria)
+                    if criteria:
+                        lines.append("**Acceptance criteria**")
+                        lines.append("")
+                        lines.extend(f"- {item}" for item in criteria)
+                        lines.append("")
+
+                    test_cases = story_bucket["test_cases"]
+                    if test_cases:
+                        lines.append("**Test cases**")
+                        lines.append("")
+                        for tc in test_cases:
+                            lines.append(f"- **{tc.title}** ({tc.test_type})")
+                            lines.append(f"  - Steps: {_as_text(tc.steps)}")
+                            lines.append(f"  - Expected: {_as_text(tc.expected_result)}")
+                        lines.append("")
+
+        return "\n".join(lines).rstrip().encode("utf-8") + b"\n"
+
+
+def _as_text(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
 
 
 def _slugify(value: str) -> str:

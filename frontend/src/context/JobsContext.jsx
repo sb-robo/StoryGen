@@ -17,6 +17,7 @@ export function JobsProvider({ children }) {
   const [jobs, setJobs] = useState([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [toasts, setToasts] = useState([])
+  const [jobFocus, setJobFocus] = useState(null)
 
   const dismissToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -36,14 +37,23 @@ export function JobsProvider({ children }) {
     setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...patch } : j)))
   }, [])
 
+  const clearJobFocus = useCallback(() => setJobFocus(null), [])
+
   const trackJob = useCallback(
     async (op, { label, brdId, onComplete } = {}) => {
       const jobId = makeJobId()
+      const resolvedBrdId =
+        brdId ??
+        (op.resource_type === 'brd' ? op.resource_id : null) ??
+        null
       const job = {
         id: jobId,
         operationId: op.operation_id,
+        operationType: op.operation_type ?? null,
+        resourceType: op.resource_type ?? null,
+        resourceId: op.resource_id ?? null,
         label: label || 'Background job',
-        brdId: brdId ?? null,
+        brdId: resolvedBrdId,
         status: 'running',
         error: null,
         startedAt: Date.now(),
@@ -61,10 +71,18 @@ export function JobsProvider({ children }) {
               else if (status.status === 'cancelled') mapped = 'cancelled'
               else mapped = 'succeeded'
             }
-            updateJob(jobId, {
+            const patch = {
               status: mapped,
               error: status.error_message ?? null,
-            })
+            }
+            if (status.resource_type != null) patch.resourceType = status.resource_type
+            if (status.resource_id != null) patch.resourceId = status.resource_id
+            if (status.operation_type != null) patch.operationType = status.operation_type
+            if (resolvedBrdId != null) patch.brdId = resolvedBrdId
+            else if (status.resource_type === 'brd' && status.resource_id != null) {
+              patch.brdId = status.resource_id
+            }
+            updateJob(jobId, patch)
           },
         })
 
@@ -114,7 +132,7 @@ export function JobsProvider({ children }) {
         const op = await operationsApi.retryOperation(job.operationId)
         return await trackJob(op, {
           label: `Retry: ${job.label || 'Job'}`,
-          brdId: job.brdId,
+          brdId: job.brdId ?? (op.resource_type === 'brd' ? op.resource_id : null),
           onComplete,
         })
       } catch (err) {
@@ -142,6 +160,9 @@ export function JobsProvider({ children }) {
         cancelJob,
         retryJob,
         clearFinished,
+        jobFocus,
+        setJobFocus,
+        clearJobFocus,
         toasts,
         dismissToast,
       }}
