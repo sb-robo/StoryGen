@@ -35,6 +35,7 @@ from app.schemas.pipeline_settings_schema import (
 from app.services.brd.chunk_service import BrdChunkService
 from app.services.brd.parser_service import BrdParserService
 from app.services.brd.storage_service import BrdStorageService
+from app.utils.process_tracker import track, track_error, track_queued, track_run, track_saved
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx"}
 ALLOWED_FORMAT_LABEL = "PDF (.pdf), Word (.docx), Excel (.xlsx)"
@@ -321,6 +322,12 @@ class BrdService:
 
         # Commit before the response so the background task can see both rows.
         await self.db.commit()
+        track_queued(
+            "brd_upload",
+            brd_id=brd.id,
+            name=brd_name,
+            operation_id=operation.id,
+        )
         return self._operation_response(operation)
 
     async def enqueue_reparse(self, user_id: int, brd_id: int) -> OperationResponse:
@@ -352,6 +359,11 @@ class BrdService:
         brd.error_message = None
         await self.repo.update(brd)
         await self.db.commit()
+        track_queued(
+            "brd_reparse",
+            brd_id=brd.id,
+            operation_id=operation.id,
+        )
         return self._operation_response(operation)
 
     async def complete_parse(self, brd_id: int) -> BrdDocument | None:
@@ -363,11 +375,13 @@ class BrdService:
         try:
             return await self._run_parse(brd)
         except Exception as exc:
+            track_error("parse failed", exc=exc, brd_id=brd_id)
             brd.status = BrdStatus.PARSE_FAILED.value
             brd.error_message = str(exc)
             return await self.repo.update(brd)
 
     async def _run_parse(self, brd: BrdDocument) -> BrdDocument:
+        track_run("parse document", brd_id=brd.id, name=brd.name)
         brd_dir = Path(brd.storage_path)
         parsed = await self.parser_service.parse_and_persist(
             user_id=brd.user_id,
@@ -384,10 +398,16 @@ class BrdService:
         brd.status = BrdStatus.PARSED.value
         brd.error_message = None
         updated = await self.repo.update(brd)
-        await self.chunk_service.index_parsed_markdown(
+        chunk_count = await self.chunk_service.index_parsed_markdown(
             updated,
             parsed.text,
             parser_tables=parsed.tables,
+        )
+        track_saved(
+            "parsed BRD",
+            brd_id=updated.id,
+            pages=parsed.page_count,
+            chunks=chunk_count,
         )
         return updated
 

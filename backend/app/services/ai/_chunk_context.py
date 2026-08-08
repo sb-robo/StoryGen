@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from app.ai.openai_client import OpenAIClient
 from app.ai.rag.chunk_retrieval import (
     build_retrieval_query,
@@ -11,8 +9,7 @@ from app.ai.rag.chunk_retrieval import (
     retrieve_similar_chunks,
 )
 from app.repositories.brd_chunk_repository import BrdChunkRepository
-
-logger = logging.getLogger(__name__)
+from app.utils.process_tracker import track, track_error
 
 
 async def fetch_brd_chunk_context(
@@ -30,9 +27,10 @@ async def fetch_brd_chunk_context(
     """
     query = build_retrieval_query(*query_parts)
     if not query:
-        logger.debug("BRD chunk retrieval skipped for brd_id=%s: empty query", brd_id)
+        track("skipped (empty query)", brd_id=brd_id)
         return ""
 
+    track("search similar BRD chunks", brd_id=brd_id)
     try:
         chunks = await retrieve_similar_chunks(
             client,
@@ -40,17 +38,16 @@ async def fetch_brd_chunk_context(
             brd_id=brd_id,
             query_text=query,
         )
-    except Exception:
-        logger.exception(
-            "BRD chunk retrieval failed for brd_id=%s; continuing without chunk context",
-            brd_id,
+    except Exception as exc:
+        track_error(
+            "retrieval failed; continuing without chunk context",
+            exc=exc,
+            brd_id=brd_id,
         )
         return ""
 
     if not chunks:
-        logger.debug("BRD chunk retrieval returned no matches for brd_id=%s", brd_id)
+        track("no similar chunks found", brd_id=brd_id)
         return ""
-    logger.info(
-        "BRD chunk retrieval returned %s chunk(s) for brd_id=%s", len(chunks), brd_id
-    )
+    track("chunks retrieved", brd_id=brd_id, count=len(chunks))
     return format_similar_chunks(chunks)

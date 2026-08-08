@@ -23,6 +23,7 @@ from app.schemas.story_schema import (
 )
 from app.services.ai._helpers import ensure_operation_not_running, operation_response
 from app.services.ai.story_service import StoryService
+from app.utils.process_tracker import track_queued, track_run, track_saved
 
 
 class StoryPointsService:
@@ -92,6 +93,11 @@ class StoryPointsService:
             )
         )
         await self.db.commit()
+        track_queued(
+            "story_point_estimation",
+            story_id=story_id,
+            operation_id=operation.id,
+        )
         return operation_response(operation)
 
     async def complete_estimation(self, operation_id: str) -> BrdStory | None:
@@ -102,6 +108,12 @@ class StoryPointsService:
         story = await self.story_repo.get_by_id(operation.resource_id)
         if not story:
             return None
+
+        track_run(
+            "story_point_estimation",
+            story_id=story.id,
+            title=story.title,
+        )
 
         brd_id = await self._brd_id_for_story(story)
         ac = decode_acceptance_criteria(story.acceptance_criteria)
@@ -127,7 +139,13 @@ class StoryPointsService:
         story.points_status = PointsStatus.PENDING_REVIEW.value
         story.points_reviewed_by = None
         story.points_reviewed_at = None
-        return await self.story_repo.update(story)
+        updated = await self.story_repo.update(story)
+        track_saved(
+            "story points",
+            story_id=story.id,
+            points=estimate.story_points,
+        )
+        return updated
 
     async def get_estimation_result(
         self, user_id: int, operation_id: str

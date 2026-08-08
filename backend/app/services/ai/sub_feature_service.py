@@ -30,6 +30,7 @@ from app.schemas.sub_feature_schema import (
 )
 from app.services.ai._chunk_context import fetch_brd_chunk_context
 from app.services.ai._helpers import ensure_operation_not_running, operation_response
+from app.utils.process_tracker import track_queued, track_run, track_saved
 
 
 class SubFeatureService:
@@ -121,6 +122,11 @@ class SubFeatureService:
             )
         )
         await self.db.commit()
+        track_queued(
+            "sub_feature_generation",
+            feature_id=feature_id,
+            operation_id=operation.id,
+        )
         return operation_response(operation)
 
     async def complete_generation(
@@ -133,6 +139,13 @@ class SubFeatureService:
         feature = await self.feature_repo.get_by_id(operation.resource_id)
         if not feature:
             return None
+
+        track_run(
+            "sub_feature_generation",
+            feature_id=feature.id,
+            title=feature.title,
+            brd_id=feature.brd_id,
+        )
 
         brd = await self.brd_repo.get_by_id(feature.brd_id)
         brd_context = await fetch_brd_chunk_context(
@@ -191,6 +204,11 @@ class SubFeatureService:
         if not items:
             raise RuntimeError("Sub-feature generation returned no items")
 
+        track_saved(
+            "sub-features",
+            feature_id=feature.id,
+            count=len(items),
+        )
         return await self.repo.create_many(items)
 
     async def list_sub_features(

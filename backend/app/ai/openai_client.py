@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import time
 from typing import TypeVar
 
@@ -14,8 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.models.llm_call_log import LlmCallLog
 from app.repositories.llm_call_log_repository import LlmCallLogRepository
-
-logger = logging.getLogger(__name__)
+from app.utils.process_tracker import node_label, track, track_error
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -67,16 +65,14 @@ class OpenAIClient:
             "|".join(f"{m['role']}:{m['content']}" for m in messages).encode()
         ).hexdigest()
         prompt_chars = sum(len(m["content"]) for m in messages)
+        label = node_label(node_name)
+        round_suffix = f" round {iteration}" if iteration else ""
 
-        logger.info(
-            "LLM call starting: node=%s iteration=%s model=%s operation_id=%s brd_id=%s "
-            "prompt_chars=%s",
-            node_name,
-            iteration,
-            self.model,
-            operation_id,
-            brd_id,
-            prompt_chars,
+        track(
+            f"LLM start: {label}{round_suffix}",
+            model=self.model,
+            chars=prompt_chars,
+            brd_id=brd_id,
         )
 
         started = time.perf_counter()
@@ -86,16 +82,13 @@ class OpenAIClient:
                 messages=messages,
                 response_format=response_model,
             )
-        except Exception:
+        except Exception as exc:
             latency_ms = int((time.perf_counter() - started) * 1000)
-            logger.exception(
-                "LLM call failed: node=%s iteration=%s model=%s operation_id=%s "
-                "after %sms",
-                node_name,
-                iteration,
-                self.model,
-                operation_id,
-                latency_ms,
+            track_error(
+                f"LLM failed: {label}{round_suffix}",
+                exc=exc,
+                model=self.model,
+                ms=latency_ms,
             )
             raise
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -104,15 +97,12 @@ class OpenAIClient:
         tokens_in = usage.prompt_tokens if usage else 0
         tokens_out = usage.completion_tokens if usage else 0
 
-        logger.info(
-            "LLM call finished: node=%s iteration=%s latency_ms=%s tokens_in=%s "
-            "tokens_out=%s operation_id=%s",
-            node_name,
-            iteration,
-            latency_ms,
-            tokens_in,
-            tokens_out,
-            operation_id,
+        track(
+            f"LLM done: {label}{round_suffix}",
+            model=self.model,
+            ms=latency_ms,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
         )
 
         if self.log_repo is not None and user_id is not None:
@@ -133,15 +123,9 @@ class OpenAIClient:
 
         parsed = response.choices[0].message.parsed
         if parsed is None:
-            logger.error(
-                "LLM call returned no parsed output: node=%s operation_id=%s "
-                "finish_reason=%s refusal=%s",
-                node_name,
-                operation_id,
-                response.choices[0].finish_reason if response.choices else None,
-                getattr(response.choices[0].message, "refusal", None)
-                if response.choices
-                else None,
+            track_error(
+                f"LLM returned no parsed output: {label}",
+                finish_reason=response.choices[0].finish_reason if response.choices else None,
             )
             raise RuntimeError(f"OpenAI returned no parsed output for node {node_name}")
         return parsed
@@ -156,6 +140,11 @@ class OpenAIClient:
         if not texts:
             return []
 
+        track(
+            "embed texts for retrieval",
+            model=self.embedding_model,
+            count=len(texts),
+        )
         response = await self._client.embeddings.create(
             model=self.embedding_model,
             input=texts,

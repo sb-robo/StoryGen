@@ -34,6 +34,7 @@ from app.schemas.operation_schema import OperationResponse
 from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.services.ai._chunk_context import fetch_brd_chunk_context
 from app.services.brd.storage_service import BrdStorageService
+from app.utils.process_tracker import track, track_queued, track_run, track_saved
 
 
 class FeatureService:
@@ -163,6 +164,11 @@ class FeatureService:
             )
         )
         await self.db.commit()
+        track_queued(
+            "feature_extraction",
+            brd_id=brd_id,
+            operation_id=operation.id,
+        )
         return self._operation_response(operation)
 
     async def complete_extraction(self, operation_id: str) -> list[BrdFeature] | None:
@@ -174,6 +180,12 @@ class FeatureService:
         brd = await self.brd_repo.get_by_id(operation.resource_id)
         if not brd:
             return None
+
+        track_run(
+            "feature_extraction",
+            brd_id=brd.id,
+            name=brd.name,
+        )
 
         existing = await self.repo.list_for_brd(operation.user_id, brd.id)
         approved = [
@@ -240,6 +252,11 @@ class FeatureService:
         if not features:
             raise RuntimeError("Feature extraction returned no features")
 
+        track_saved(
+            "features",
+            brd_id=brd.id,
+            count=len(features),
+        )
         return await self.repo.create_many(features)
 
     async def list_features(
@@ -455,6 +472,11 @@ class FeatureService:
             )
 
         clarifying_qa = format_clarifying_qa_for_prompt(questions, answers)
+        track_run(
+            "refine feature from answers",
+            feature_id=feature.id,
+            title=feature.title,
+        )
         brd_context = await fetch_brd_chunk_context(
             self.openai_client,
             self.chunk_repo,
@@ -517,4 +539,9 @@ class FeatureService:
             feature.reviewed_at = None
 
         feature = await self.repo.update(feature)
+        track_saved(
+            "refined feature",
+            feature_id=feature.id,
+            title=feature.title,
+        )
         return self._to_response(feature)

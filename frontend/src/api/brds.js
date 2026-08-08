@@ -24,6 +24,11 @@ export function getPipelineSummary(brdId) {
   return api.get(`/brds/${brdId}/pipeline-summary`)
 }
 
+/** Full features → sub-features → stories → test-cases tree in one request. */
+export function getPipeline(brdId) {
+  return api.get(`/brds/${brdId}/pipeline`)
+}
+
 export function getLlmUsage(brdId) {
   return api.get(`/brds/${brdId}/llm-usage`)
 }

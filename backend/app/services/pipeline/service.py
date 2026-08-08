@@ -12,14 +12,20 @@ from app.repositories.feature_repository import (
     decode_clarifying_answers,
     decode_clarifying_questions,
 )
+from app.repositories.story_repository import decode_acceptance_criteria
+from app.schemas.feature_schema import ClarifyingAnswer, FeatureResponse
 from app.schemas.pipeline_schema import (
     PipelineBlocker,
     PipelineSummaryResponse,
     PipelineTotals,
+    PipelineTreeResponse,
     StageSummary,
     StatusCounts,
     SuggestedStep,
 )
+from app.schemas.story_schema import StoryResponse
+from app.schemas.sub_feature_schema import SubFeatureResponse
+from app.schemas.test_case_schema import TestCaseResponse
 
 
 class PipelineService:
@@ -60,6 +66,30 @@ class PipelineService:
             blockers=blockers,
             suggested_step=suggested,
             totals=totals,
+        )
+
+    async def get_tree(self, user_id: int, brd_id: int) -> PipelineTreeResponse:
+        brd = await self.brd_repo.get_by_id_for_user(brd_id, user_id)
+        if not brd:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="BRD not found",
+            )
+
+        features = await self._list_features(user_id, brd_id)
+        feature_ids = [f.id for f in features]
+        sub_features = await self._list_sub_features(user_id, feature_ids)
+        sub_feature_ids = [sf.id for sf in sub_features]
+        stories = await self._list_stories(user_id, sub_feature_ids)
+        story_ids = [s.id for s in stories]
+        test_cases = await self._list_test_cases(user_id, story_ids)
+
+        return PipelineTreeResponse(
+            brd_id=brd.id,
+            features=[_feature_response(f) for f in features],
+            sub_features=[SubFeatureResponse.model_validate(sf) for sf in sub_features],
+            stories=[_story_response(s) for s in stories],
+            test_cases=[TestCaseResponse.model_validate(tc) for tc in test_cases],
         )
 
     async def _list_features(self, user_id: int, brd_id: int) -> list[BrdFeature]:
@@ -114,6 +144,59 @@ class PipelineService:
             .order_by(BrdTestCase.sort_order.asc(), BrdTestCase.id.asc())
         )
         return list(result.scalars().all())
+
+
+def _feature_response(feature: BrdFeature) -> FeatureResponse:
+    return FeatureResponse(
+        id=feature.id,
+        brd_id=feature.brd_id,
+        user_id=feature.user_id,
+        operation_id=feature.operation_id,
+        title=feature.title,
+        description=feature.description,
+        confidence=feature.confidence,
+        rationale=feature.rationale,
+        clarifying_questions=decode_clarifying_questions(feature.clarifying_questions),
+        clarifying_answers=[
+            ClarifyingAnswer(**item)
+            for item in decode_clarifying_answers(feature.clarifying_answers)
+        ],
+        source_excerpt=feature.source_excerpt,
+        source_chunk_id=feature.source_chunk_id,
+        status=feature.status,
+        reviewed_by=feature.reviewed_by,
+        reviewed_at=feature.reviewed_at,
+        sort_order=feature.sort_order,
+        created_at=feature.created_at,
+        updated_at=feature.updated_at,
+    )
+
+
+def _story_response(item: BrdStory) -> StoryResponse:
+    return StoryResponse(
+        id=item.id,
+        sub_feature_id=item.sub_feature_id,
+        user_id=item.user_id,
+        operation_id=item.operation_id,
+        title=item.title,
+        description=item.description,
+        acceptance_criteria=decode_acceptance_criteria(item.acceptance_criteria),
+        confidence=item.confidence,
+        rationale=item.rationale,
+        source_excerpt=item.source_excerpt,
+        source_chunk_id=item.source_chunk_id,
+        status=item.status,
+        story_points=item.story_points,
+        points_rationale=item.points_rationale,
+        points_status=item.points_status,
+        points_reviewed_by=item.points_reviewed_by,
+        points_reviewed_at=item.points_reviewed_at,
+        reviewed_by=item.reviewed_by,
+        reviewed_at=item.reviewed_at,
+        sort_order=item.sort_order,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
 
 
 def _count_by_status(statuses: list[str]) -> StatusCounts:

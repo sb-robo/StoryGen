@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import smtplib
 from email.message import EmailMessage
 from urllib.parse import quote
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
+from app.utils.process_tracker import track, track_error
 
 
 def _build_reset_message(*, to_email: str, reset_token: str) -> EmailMessage:
@@ -78,18 +76,18 @@ async def send_password_reset_email(*, to_email: str, reset_token: str) -> bool:
         if settings.DEBUG:
             base = (settings.FRONTEND_BASE_URL or "http://localhost:5173").rstrip("/")
             link = f"{base}/reset-password?token={quote(reset_token)}"
-            logger.warning(
-                "SMTP not configured — password reset link for %s: %s",
-                to_email,
-                link,
+            track(
+                "SMTP not configured; reset link logged in dev",
+                to=to_email,
+                link=link,
             )
         return False
 
     msg = _build_reset_message(to_email=to_email, reset_token=reset_token)
     try:
         await asyncio.to_thread(_send_smtp_sync, msg)
-        logger.info("Password reset email sent to %s", to_email)
+        track("sent password reset email", to=to_email)
         return True
-    except Exception:
-        logger.exception("Failed to send password reset email to %s", to_email)
+    except Exception as exc:
+        track_error("failed to send password reset email", exc=exc, to=to_email)
         raise

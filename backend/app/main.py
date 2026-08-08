@@ -1,38 +1,34 @@
 import logging
 from logging import getLogger
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.core.config import apply_huggingface_token, apply_openai_settings, settings
 
-# Configure the root logger before importing routers/services so that every
-# `logging.getLogger(__name__)` call in the app (node execution, LLM calls,
-# background tasks, RAG retrieval, etc.) actually produces output.
-# Uvicorn only configures its own "uvicorn"/"uvicorn.access" loggers by
-# default; without this, app-level logger.info()/logger.debug() calls are
-# silently dropped and only uvicorn's request access logs are visible.
+# Configure app logging. Third-party HTTP/OpenAI libraries stay quiet so
+# terminals show StoryGen process flow, not raw request payloads.
+_log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
 logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-    if not settings.DEBUG
-    else logging.DEBUG,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    level=_log_level,
+    format="%(asctime)s %(levelname)s %(name)s --> %(message)s",
     datefmt="%H:%M:%S",
 )
-# Quiet noisy third-party libraries unless we explicitly want DEBUG everywhere.
-if not settings.DEBUG:
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
+for _noisy in ("httpx", "httpcore", "openai", "urllib3", "uvicorn.access"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 from app.api.v1 import api  # noqa: E402 (import after logging setup)
 from app.db.session import async_session_local  # noqa: E402
+from app.middleware.request_tracker import RequestTrackerMiddleware  # noqa: E402
+from app.utils.process_tracker import track_error  # noqa: E402
 
 logger = getLogger(__name__)
 ROUTE_PREFIX = "/api/v1"
 app = FastAPI(title="StoryGen API", version="0.1.0")
 
+app.add_middleware(RequestTrackerMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -42,6 +38,18 @@ app.add_middleware(
 )
 
 app.include_router(api.router, prefix=ROUTE_PREFIX)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        raise exc
+    track_error(
+        f"unhandled error on {request.method} {request.url.path}",
+        exc=exc,
+    )
+    detail = str(exc) if settings.DEBUG else "Internal server error"
+    return JSONResponse(status_code=500, content={"detail": detail})
 
 
 @app.get("/health", tags=["Health"], summary="Liveness / readiness check")

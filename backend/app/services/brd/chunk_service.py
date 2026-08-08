@@ -1,4 +1,4 @@
-import logging
+"""Lightweight chunk indexing and embedding for parsed BRD markdown."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,8 +11,7 @@ from app.db.models.brd_document import BrdDocument
 from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.schemas.brd_chunk_schema import BrdChunkListResponse, BrdChunkResponse
 from app.schemas.pipeline_settings_schema import BrdChunkStrategy, parse_pipeline_settings
-
-logger = logging.getLogger(__name__)
+from app.utils.process_tracker import track, track_error, track_run, track_saved
 
 _EMBED_BATCH_SIZE = 64
 
@@ -44,6 +43,11 @@ class BrdChunkService:
         stored without embeddings when it is not.
         """
         strategy = chunk_strategy or parse_pipeline_settings(brd.pipeline_settings).chunk_level
+        track_run(
+            "index chunks",
+            brd_id=brd.id,
+            strategy=strategy.value,
+        )
         embed_batch = None
         if settings.openai_is_configured and self.openai_client.is_configured:
             embed_batch = self._embed_chunks
@@ -85,13 +89,15 @@ class BrdChunkService:
                 embeddings = await self._embed_chunks([row.content for row in rows])
                 for row, embedding in zip(rows, embeddings, strict=True):
                     row.embedding = embedding
-            except Exception:
-                logger.exception(
-                    "Failed to embed BRD chunks for brd_id=%s; storing without embeddings",
-                    brd.id,
+            except Exception as exc:
+                track_error(
+                    "embedding failed; storing without embeddings",
+                    exc=exc,
+                    brd_id=brd.id,
                 )
 
         await self.repo.create_many(rows)
+        track_saved("chunks", brd_id=brd.id, count=len(rows))
         return len(rows)
 
     async def _embed_chunks(self, texts: list[str]) -> list[list[float]]:

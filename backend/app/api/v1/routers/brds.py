@@ -46,7 +46,7 @@ from app.schemas.pipeline_settings_schema import BrdPipelineSettings
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.feature_schema import FeatureListResponse, FeatureStatusFilter
 from app.schemas.llm_usage_schema import LlmUsageSummaryResponse
-from app.schemas.pipeline_schema import PipelineSummaryResponse
+from app.schemas.pipeline_schema import PipelineSummaryResponse, PipelineTreeResponse
 from app.services.ai import FeatureService
 from app.services.ai.batch_service import BatchService
 from app.services.ai.tasks import (
@@ -402,6 +402,23 @@ async def get_pipeline_summary(
     pipeline_service: PipelineService = Depends(get_pipeline_service),
 ) -> PipelineSummaryResponse:
     return await pipeline_service.get_summary(current_user.id, brd_id)
+
+
+@router.get(
+    "/{brd_id}/pipeline",
+    response_model=PipelineTreeResponse,
+    summary="Full pipeline tree for a BRD",
+    description=(
+        "Returns features, sub-features, stories, and test cases in one response "
+        "so the workspace can load/refresh without N+1 list calls."
+    ),
+)
+async def get_pipeline_tree(
+    brd_id: int,
+    current_user: User = Depends(get_current_user),
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+) -> PipelineTreeResponse:
+    return await pipeline_service.get_tree(current_user.id, brd_id)
 
 
 @router.get(

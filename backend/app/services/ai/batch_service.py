@@ -12,6 +12,7 @@ from app.services.ai.story_points_service import StoryPointsService
 from app.services.ai.story_service import StoryService
 from app.services.ai.sub_feature_service import SubFeatureService
 from app.services.ai.test_case_service import TestCaseService
+from app.utils.process_tracker import track
 
 
 class BatchService:
@@ -146,6 +147,12 @@ class BatchService:
         skipped: list[BatchSkippedItem] = []
         operation_ids: list[str] = []
 
+        track(
+            f"batch enqueue {action}",
+            brd_id=brd_id,
+            candidates=len(items),
+        )
+
         for item in items:
             try:
                 op = await enqueue(item)
@@ -162,6 +169,13 @@ class BatchService:
                     )
                     continue
                 raise
+
+        track(
+            f"batch enqueue {action} complete",
+            brd_id=brd_id,
+            queued=len(operations),
+            skipped=len(skipped),
+        )
 
         return (
             BatchOperationResponse(

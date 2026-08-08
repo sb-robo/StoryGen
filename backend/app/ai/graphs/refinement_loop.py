@@ -5,6 +5,7 @@ from typing import Generic, TypeVar
 
 from app.ai.openai_client import OpenAIClient
 from app.core.config import settings
+from app.utils.process_tracker import track
 
 TDraft = TypeVar("TDraft")
 TCritique = TypeVar("TCritique")
@@ -41,7 +42,9 @@ class RefinementLoop(Generic[TDraft, TCritique]):
         for iteration in range(1, self.max_iterations + 1):
             critique_result = await critique(draft, iteration)
             if passes(critique_result):
+                track("critique passed", round=iteration)
                 break
+            track("critique failed; revising", round=iteration)
             draft = await revise(draft, critique_result, iteration)
 
         return draft

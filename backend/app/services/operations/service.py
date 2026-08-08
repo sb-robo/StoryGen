@@ -27,6 +27,7 @@ from app.services.ai.test_case_service import TestCaseService
 from app.services.brd.service import BrdService
 from app.utils.operation_progress import format_operation_progress
 from app.utils.operation_urls import operation_status_url
+from app.utils.process_tracker import track
 
 
 class OperationService:
@@ -330,6 +331,11 @@ class OperationService:
             )
         operation = await self.repo.mark_cancelled(operation)
         await self.db.commit()
+        track(
+            "cancelled operation",
+            operation_id=operation.id,
+            type=operation.operation_type,
+        )
         return self._to_response(operation, include_user_id=user.is_admin)
 
     async def retry_operation(
@@ -359,29 +365,38 @@ class OperationService:
         op_type = operation.operation_type
         resource_id = operation.resource_id
 
+        new_op: OperationResponse | None = None
         if op_type == OperationType.FEATURE_EXTRACTION.value:
-            return await self.feature_service.enqueue_extraction(owner_id, resource_id)
-        if op_type == OperationType.SUB_FEATURE_GENERATION.value:
-            return await self.sub_feature_service.enqueue_generation(
+            new_op = await self.feature_service.enqueue_extraction(owner_id, resource_id)
+        elif op_type == OperationType.SUB_FEATURE_GENERATION.value:
+            new_op = await self.sub_feature_service.enqueue_generation(
                 owner_id, resource_id
             )
-        if op_type == OperationType.STORY_GENERATION.value:
-            return await self.story_service.enqueue_generation(owner_id, resource_id)
-        if op_type == OperationType.STORY_POINT_ESTIMATION.value:
-            return await self.story_points_service.enqueue_estimation(
+        elif op_type == OperationType.STORY_GENERATION.value:
+            new_op = await self.story_service.enqueue_generation(owner_id, resource_id)
+        elif op_type == OperationType.STORY_POINT_ESTIMATION.value:
+            new_op = await self.story_points_service.enqueue_estimation(
                 owner_id, resource_id
             )
-        if op_type == OperationType.TEST_CASE_GENERATION.value:
-            return await self.test_case_service.enqueue_generation(
+        elif op_type == OperationType.TEST_CASE_GENERATION.value:
+            new_op = await self.test_case_service.enqueue_generation(
                 owner_id, resource_id
             )
-        if op_type in {
+        elif op_type in {
             OperationType.BRD_UPLOAD.value,
             OperationType.BRD_REPARSE.value,
         }:
-            return await self.brd_service.enqueue_reparse(owner_id, resource_id)
+            new_op = await self.brd_service.enqueue_reparse(owner_id, resource_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Retry is not supported for operation type '{op_type}'.",
+            )
 
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Retry is not supported for operation type '{op_type}'.",
+        track(
+            "retried operation",
+            from_operation_id=operation.id,
+            new_operation_id=new_op.operation_id,
+            type=op_type,
         )
+        return new_op

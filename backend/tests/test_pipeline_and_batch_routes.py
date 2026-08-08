@@ -17,6 +17,7 @@ from app.schemas.operation_schema import OperationResponse
 from app.schemas.pipeline_schema import (
     PipelineSummaryResponse,
     PipelineTotals,
+    PipelineTreeResponse,
     StageSummary,
     StatusCounts,
     SuggestedStep,
@@ -82,6 +83,27 @@ def test_pipeline_summary_ok(client, mock_pipeline_service):
     assert body["brd_id"] == 1
     assert body["suggested_step"]["action"] == "review"
     mock_pipeline_service.get_summary.assert_awaited_once_with(1, 1)
+
+
+def test_pipeline_tree_ok(client, mock_pipeline_service):
+    mock_pipeline_service.get_tree = AsyncMock(
+        return_value=PipelineTreeResponse(
+            brd_id=1,
+            features=[],
+            sub_features=[],
+            stories=[],
+            test_cases=[],
+        )
+    )
+
+    response = client.get("/api/v1/brds/1/pipeline")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["brd_id"] == 1
+    assert body["features"] == []
+    assert body["sub_features"] == []
+    mock_pipeline_service.get_tree.assert_awaited_once_with(1, 1)
 
 
 def test_batch_sub_features_returns_202(client, mock_batch_service):

@@ -1,5 +1,10 @@
 from pydantic import BaseModel, Field
 
+from app.schemas.feature_schema import FeatureResponse
+from app.schemas.story_schema import StoryResponse
+from app.schemas.sub_feature_schema import SubFeatureResponse
+from app.schemas.test_case_schema import TestCaseResponse
+
 
 class StatusCounts(BaseModel):
     total: int = 0
@@ -41,3 +46,13 @@ class PipelineSummaryResponse(BaseModel):
     blockers: list[PipelineBlocker] = Field(default_factory=list)
     suggested_step: SuggestedStep
     totals: PipelineTotals
+
+
+class PipelineTreeResponse(BaseModel):
+    """Full workspace tree in one response (avoids N+1 list fan-out)."""
+
+    brd_id: int
+    features: list[FeatureResponse] = Field(default_factory=list)
+    sub_features: list[SubFeatureResponse] = Field(default_factory=list)
+    stories: list[StoryResponse] = Field(default_factory=list)
+    test_cases: list[TestCaseResponse] = Field(default_factory=list)

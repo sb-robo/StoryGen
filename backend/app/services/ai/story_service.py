@@ -30,6 +30,7 @@ from app.schemas.story_schema import (
 )
 from app.services.ai._chunk_context import fetch_brd_chunk_context
 from app.services.ai._helpers import ensure_operation_not_running, operation_response
+from app.utils.process_tracker import track_queued, track_run, track_saved
 
 
 class StoryService:
@@ -128,6 +129,11 @@ class StoryService:
             )
         )
         await self.db.commit()
+        track_queued(
+            "story_generation",
+            sub_feature_id=sub_feature_id,
+            operation_id=operation.id,
+        )
         return operation_response(operation)
 
     async def complete_generation(self, operation_id: str) -> list[BrdStory] | None:
@@ -142,6 +148,13 @@ class StoryService:
         feature = await self.feature_repo.get_by_id(sub_feature.feature_id)
         if not feature:
             return None
+
+        track_run(
+            "story_generation",
+            sub_feature_id=sub_feature.id,
+            title=sub_feature.title,
+            brd_id=feature.brd_id,
+        )
 
         brd = await self.brd_repo.get_by_id(feature.brd_id)
         brd_context = await fetch_brd_chunk_context(
@@ -203,6 +216,11 @@ class StoryService:
         if not items:
             raise RuntimeError("Story generation returned no items")
 
+        track_saved(
+            "stories",
+            sub_feature_id=sub_feature.id,
+            count=len(items),
+        )
         return await self.repo.create_many(items)
 
     async def list_stories(

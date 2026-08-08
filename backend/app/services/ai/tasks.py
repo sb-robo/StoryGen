@@ -1,4 +1,3 @@
-import logging
 import time
 
 from app.db.session import async_session_local
@@ -8,8 +7,7 @@ from app.services.ai.story_points_service import StoryPointsService
 from app.services.ai.story_service import StoryService
 from app.services.ai.sub_feature_service import SubFeatureService
 from app.services.ai.test_case_service import TestCaseService
-
-logger = logging.getLogger(__name__)
+from app.utils.process_tracker import track, track_error
 
 
 async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_factory) -> None:
@@ -21,19 +19,17 @@ async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_fact
         try:
             operation = await op_repo.get_by_id(operation_id)
             if not operation:
-                logger.error("Operation not found: %s", operation_id)
+                track_error("operation not found")
                 return
             if operation.status == OperationStatus.CANCELLED.value:
-                logger.info("Skipping cancelled operation: %s", operation_id)
+                track("skipped (cancelled)")
                 return
 
-            logger.info(
-                "Background AI task starting: %s operation_id=%s resource_type=%s "
-                "resource_id=%s",
-                complete_fn_name,
-                operation_id,
-                operation.resource_type,
-                operation.resource_id,
+            track(
+                f"start {operation.operation_type}",
+                service=service_factory.__name__,
+                handler=complete_fn_name,
+                resource=f"{operation.resource_type}#{operation.resource_id}",
             )
 
             await op_repo.mark_running(operation)
@@ -41,7 +37,7 @@ async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_fact
 
             operation = await op_repo.get_by_id(operation_id)
             if not operation or operation.status == OperationStatus.CANCELLED.value:
-                logger.info("Operation cancelled before work started: %s", operation_id)
+                track("cancelled before work started")
                 return
 
             service = service_factory(session)
@@ -50,45 +46,43 @@ async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_fact
 
             operation = await op_repo.get_by_id(operation_id)
             if not operation or operation.status == OperationStatus.CANCELLED.value:
-                logger.info("Operation cancelled during work: %s", operation_id)
+                track("cancelled during work")
                 return
 
             if result is None:
                 await op_repo.mark_failed(
                     operation, f"Resource not found for {complete_fn_name}"
                 )
-                logger.warning(
-                    "Background AI task failed (resource missing): %s operation_id=%s",
-                    complete_fn_name,
-                    operation_id,
+                track_error(
+                    f"failed {operation.operation_type}",
+                    reason="resource not found",
                 )
             else:
                 await op_repo.mark_succeeded(operation)
                 elapsed_ms = int((time.perf_counter() - started) * 1000)
-                logger.info(
-                    "Background AI task succeeded: %s operation_id=%s elapsed_ms=%s",
-                    complete_fn_name,
-                    operation_id,
-                    elapsed_ms,
+                track(
+                    f"done {operation.operation_type}",
+                    status="succeeded",
+                    ms=elapsed_ms,
                 )
 
             await session.commit()
         except Exception as exc:
             await session.rollback()
-            logger.exception(
-                "Background AI task failed (%s) for operation_id=%s",
-                complete_fn_name,
-                operation_id,
+            track_error(
+                f"failed {complete_fn_name}",
+                exc=exc,
             )
             try:
                 operation = await op_repo.get_by_id(operation_id)
                 if operation and operation.status != OperationStatus.CANCELLED.value:
                     await op_repo.mark_failed(operation, str(exc))
                     await session.commit()
-            except Exception:
+            except Exception as mark_exc:
                 await session.rollback()
-                logger.exception(
-                    "Failed to mark operation as failed: %s", operation_id
+                track_error(
+                    "could not mark operation failed",
+                    exc=mark_exc,
                 )
 
 

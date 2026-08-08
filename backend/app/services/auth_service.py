@@ -20,6 +20,7 @@ from app.schemas.user_schema import UserResponse
 from app.services.email_service import send_password_reset_email
 from app.utils.jwt_handler import create_access_token, create_refresh_token, decode_token
 from app.utils.password_handler import hash_password, verify_password
+from app.utils.process_tracker import track_error
 from app.utils.token_hash import hash_token
 
 
@@ -67,6 +68,7 @@ class AuthService:
     async def login(self, data: UserLoginRequest) -> LoginResponse:
         user = await self.repo.get_user_by_email(data.email)
         if not user or not verify_password(data.password, user.hashed_password):
+            track_error("login failed", email=data.email)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",

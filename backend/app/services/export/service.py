@@ -13,6 +13,7 @@ from app.repositories.brd_repository import BrdRepository
 from app.services.export.base import ExportFile, ExportFormat, ExportRow
 from app.services.export.csv_exporter import CSV_COLUMNS
 from app.services.export.factory import ExportFormatFactory
+from app.utils.process_tracker import track, track_error
 
 # Re-export for tests and callers
 __all__ = ["CSV_COLUMNS", "ExportFile", "ExportFormat", "ExportRow", "ExportService"]
@@ -50,13 +51,25 @@ class ExportService:
         brd = await self._get_owned_brd(user_id, brd_id)
         rows = await self._load_approved_rows(user_id, brd_id)
         if not rows:
+            track_error(
+                "export blocked (no approved stories)",
+                brd_id=brd_id,
+                format=format,
+            )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="No approved stories to export. Approve at least one story first.",
             )
 
         exporter = self.format_factory.get(format)
-        return exporter.export(brd, rows)
+        result = exporter.export(brd, rows)
+        track(
+            f"exported {format}",
+            brd_id=brd_id,
+            rows=len(rows),
+            filename=result.filename,
+        )
+        return result
 
     async def _get_owned_brd(self, user_id: int, brd_id: int) -> BrdDocument:
         brd = await self.brd_repo.get_by_id_for_user(brd_id, user_id)

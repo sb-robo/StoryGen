@@ -1,6 +1,6 @@
 export function ReviewActions({ onApprove, onReject, onEdit, disabled }) {
   return (
-    <>
+    <div className="review-actions">
       <button type="button" className="btn btn-success btn-sm" onClick={onApprove} disabled={disabled}>
         Approve
       </button>
@@ -14,6 +14,6 @@ export function ReviewActions({ onApprove, onReject, onEdit, disabled }) {
           Edit
         </button>
       )}
-    </>
+    </div>
   )
 }
