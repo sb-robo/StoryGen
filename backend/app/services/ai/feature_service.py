@@ -26,6 +26,7 @@ from app.schemas.feature_schema import (
     FeatureUpdateRequest,
 )
 from app.schemas.operation_schema import OperationResponse
+from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.services.brd.storage_service import BrdStorageService
 
 
@@ -174,6 +175,9 @@ class FeatureService:
             self.openai_client,
             brd_name=brd.name,
             brd_content=text,
+            pipeline_context=format_pipeline_context(
+                brd.pipeline_settings, for_stage="features"
+            ),
             operation_id=operation_id,
             user_id=operation.user_id,
             brd_id=brd.id,

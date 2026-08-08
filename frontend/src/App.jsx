@@ -8,6 +8,7 @@ import { BrdDetailPage } from './pages/BrdDetailPage'
 import { BrdListPage } from './pages/BrdListPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { RegisterPage } from './pages/RegisterPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 
@@ -64,6 +65,18 @@ export default function App() {
                     <Layout>
                       <ErrorBoundary title="Could not load BRD list">
                         <BrdListPage />
+                      </ErrorBoundary>
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <ErrorBoundary title="Could not load your profile">
+                        <ProfilePage />
                       </ErrorBoundary>
                     </Layout>
                   </ProtectedRoute>

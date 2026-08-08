@@ -4,6 +4,8 @@ from math import ceil
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
+from app.schemas.pipeline_settings_schema import BrdPipelineSettings
+
 
 class BrdStatusFilter(StrEnum):
     UPLOADED = "uploaded"
@@ -50,6 +52,10 @@ class BrdResponse(BaseModel):
     preview: str | None = Field(
         default=None,
         description="Short preview of parsed Markdown (list views)",
+    )
+    pipeline_settings: BrdPipelineSettings = Field(
+        default_factory=BrdPipelineSettings,
+        description="User guidance that steers AI generation for this BRD",
     )
 
     model_config = ConfigDict(from_attributes=True)
@@ -166,6 +172,10 @@ class BrdRenameRequest(BaseModel):
         if not stripped:
             raise ValueError("name must not be blank")
         return stripped
+
+
+class BrdPipelineSettingsUpdateRequest(BaseModel):
+    pipeline_settings: BrdPipelineSettings
 
 
 class BrdDeleteResponse(BaseModel):

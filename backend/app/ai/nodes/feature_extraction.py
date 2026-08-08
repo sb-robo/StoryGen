@@ -28,6 +28,7 @@ async def generate_features(
     *,
     brd_name: str,
     brd_content: str,
+    pipeline_context: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
@@ -39,7 +40,9 @@ async def generate_features(
             {
                 "role": "user",
                 "content": prompts.EXTRACT_USER.format(
-                    brd_name=brd_name, brd_content=brd_content
+                    brd_name=brd_name,
+                    brd_content=brd_content,
+                    pipeline_context=pipeline_context or "(no extra settings)",
                 ),
             },
         ],
@@ -57,6 +60,7 @@ async def critique_completeness(
     *,
     brd_content: str,
     draft: FeatureExtractionOutput,
+    pipeline_context: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
@@ -71,6 +75,7 @@ async def critique_completeness(
                 "content": prompts.CRITIQUE_USER.format(
                     section_hints=extract_section_hints(brd_content),
                     feature_titles=feature_titles,
+                    pipeline_context=pipeline_context or "(no extra settings)",
                 ),
             },
         ],
@@ -89,6 +94,7 @@ async def revise_features(
     brd_content: str,
     draft: FeatureExtractionOutput,
     critique: FeatureCompletenessCritique,
+    pipeline_context: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
@@ -106,6 +112,7 @@ async def revise_features(
                     current_features=current,
                     feedback=critique.feedback,
                     missing_sections=", ".join(critique.missing_sections) or "none",
+                    pipeline_context=pipeline_context or "(no extra settings)",
                 ),
             },
         ],

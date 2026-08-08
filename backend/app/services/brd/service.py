@@ -22,6 +22,10 @@ from app.schemas.brd_schema import (
     BrdResponse,
 )
 from app.schemas.operation_schema import OperationResponse
+from app.schemas.pipeline_settings_schema import (
+    BrdPipelineSettings,
+    parse_pipeline_settings,
+)
 from app.services.brd.parser_service import BrdParserService
 from app.services.brd.storage_service import BrdStorageService
 
@@ -164,7 +168,12 @@ class BrdService:
         )
 
     async def upload(
-        self, user_id: int, file: UploadFile, *, name: str
+        self,
+        user_id: int,
+        file: UploadFile,
+        *,
+        name: str,
+        pipeline_settings: BrdPipelineSettings | None = None,
     ) -> OperationResponse:
         """
         Stream the file to disk and return an operation_id immediately.
@@ -216,6 +225,7 @@ class BrdService:
         # (the unique-name insert failure rolls back the whole transaction).
         await self.db.commit()
 
+        settings = parse_pipeline_settings(pipeline_settings)
         brd = BrdDocument(
             user_id=user_id,
             name=brd_name,
@@ -227,6 +237,7 @@ class BrdService:
             storage_path="",
             original_path="",
             status=BrdStatus.UPLOADED.value,
+            pipeline_settings=settings.model_dump(mode="json"),
         )
         try:
             brd = await self.repo.create(brd)
@@ -469,6 +480,14 @@ class BrdService:
             )
         return path, brd.original_filename, brd.mime_type
 
+    async def update_pipeline_settings(
+        self, user_id: int, brd_id: int, settings: BrdPipelineSettings
+    ) -> BrdDetailResponse:
+        brd = await self._get_owned_brd(user_id, brd_id)
+        brd.pipeline_settings = settings.model_dump(mode="json")
+        brd = await self.repo.update(brd)
+        return await self._to_detail(brd, include_text=False)
+
     async def rename_brd(
         self, user_id: int, brd_id: int, new_name: str
     ) -> BrdDetailResponse:
@@ -572,6 +591,7 @@ class BrdService:
             created_at=brd.created_at,
             updated_at=brd.updated_at,
             preview=await self._preview(brd),
+            pipeline_settings=parse_pipeline_settings(brd.pipeline_settings),
         )
 
     async def _to_detail(

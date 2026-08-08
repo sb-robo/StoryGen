@@ -15,8 +15,10 @@ Title: {feature_title}
 Description: {feature_description}
 Source excerpt: {source_excerpt}
 
+{pipeline_context}
+
 Reviewer clarifying Q&A:
 {clarifying_qa}
 
-Generate sub-features for this approved feature. Honor the reviewer answers above when scoping sub-features.
+Generate sub-features for this approved feature. Honor the reviewer answers and pipeline settings above.
 """

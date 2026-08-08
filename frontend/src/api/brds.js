@@ -18,11 +18,20 @@ export function getPipelineSummary(brdId) {
   return api.get(`/brds/${brdId}/pipeline-summary`)
 }
 
-export function uploadBrd(name, file) {
+export function uploadBrd(name, file, pipelineSettings = null) {
   const form = new FormData()
   form.append('name', name)
   form.append('file', file)
+  if (pipelineSettings) {
+    form.append('pipeline_settings', JSON.stringify(pipelineSettings))
+  }
   return api.post('/brds/upload', form)
+}
+
+export function updatePipelineSettings(brdId, pipelineSettings) {
+  return api.patch(`/brds/${brdId}/pipeline-settings`, {
+    pipeline_settings: pipelineSettings,
+  })
 }
 
 export function extractFeatures(brdId) {

@@ -8,6 +8,7 @@ from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
 from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
+from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.operation_repository import OperationRepository
 from app.repositories.story_repository import (
@@ -17,6 +18,7 @@ from app.repositories.story_repository import (
 )
 from app.repositories.sub_feature_repository import SubFeatureRepository
 from app.schemas.operation_schema import OperationResponse
+from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.schemas.story_schema import (
     StoryGenerationResultResponse,
     StoryListResponse,
@@ -38,6 +40,7 @@ class StoryService:
         self.repo = StoryRepository(db)
         self.sub_feature_repo = SubFeatureRepository(db)
         self.feature_repo = FeatureRepository(db)
+        self.brd_repo = BrdRepository(db)
         self.operation_repo = OperationRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
 
@@ -135,6 +138,7 @@ class StoryService:
         if not feature:
             return None
 
+        brd = await self.brd_repo.get_by_id(feature.brd_id)
         output = await generate_stories_from_sub_feature(
             self.openai_client,
             feature_title=feature.title,
@@ -142,6 +146,9 @@ class StoryService:
             sub_feature_title=sub_feature.title,
             sub_feature_description=sub_feature.description,
             source_excerpt=sub_feature.source_excerpt,
+            pipeline_context=format_pipeline_context(
+                brd.pipeline_settings if brd else None, for_stage="stories"
+            ),
             operation_id=operation_id,
             user_id=operation.user_id,
             brd_id=feature.brd_id,

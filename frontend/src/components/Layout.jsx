@@ -15,7 +15,9 @@ export function Layout({ children }) {
         {user && (
           <div className="header-actions">
             <JobsButton />
-            <span className="user-label">{user.name}</span>
+            <Link to="/profile" className="user-label" title="Profile">
+              {user.name}
+            </Link>
             <button type="button" className="btn btn-ghost" onClick={logout}>
               Log out
             </button>

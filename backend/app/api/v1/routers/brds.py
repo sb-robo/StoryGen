@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 from fastapi import (
@@ -6,12 +7,14 @@ from fastapi import (
     Depends,
     File,
     Form,
+    HTTPException,
     Query,
     UploadFile,
     status,
 )
 from datetime import datetime
 from fastapi.responses import FileResponse, Response
+from pydantic import ValidationError
 
 from app.core.dependencies import (
     get_batch_service,
@@ -31,11 +34,13 @@ from app.schemas.brd_schema import (
     BrdFileExtensionFilter,
     BrdImageListResponse,
     BrdListResponse,
+    BrdPipelineSettingsUpdateRequest,
     BrdRenameRequest,
     BrdSortBy,
     BrdSortOrder,
     BrdStatusFilter,
 )
+from app.schemas.pipeline_settings_schema import BrdPipelineSettings
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.feature_schema import FeatureListResponse, FeatureStatusFilter
 from app.schemas.pipeline_schema import PipelineSummaryResponse
@@ -64,7 +69,8 @@ router = APIRouter()
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload a BRD document (async operation)",
     description=(
-        "Multipart form: `name` (unique BRD display name) + `file`. "
+        "Multipart form: `name` (unique BRD display name) + `file` + optional "
+        "`pipeline_settings` (JSON string with generation preferences). "
         "Supported formats only: PDF (.pdf), Word (.docx), Excel (.xlsx). "
         "Rejects duplicate BRD names and duplicate original filenames for the same user. "
         "Returns an `operation_id` immediately. "
@@ -85,10 +91,29 @@ async def upload_brd(
         ...,
         description="BRD file — PDF, DOCX, or XLSX only",
     ),
+    pipeline_settings: str | None = Form(
+        default=None,
+        description=(
+            "Optional JSON object with pipeline settings "
+            "(instructions, domain_context, feature_count, story_style, etc.)"
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     brd_service: BrdService = Depends(get_brd_service),
 ) -> OperationResponse:
-    operation = await brd_service.upload(current_user.id, file, name=name)
+    settings = None
+    if pipeline_settings and pipeline_settings.strip():
+        try:
+            settings = BrdPipelineSettings.model_validate(json.loads(pipeline_settings))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid pipeline_settings JSON: {exc}",
+            ) from exc
+
+    operation = await brd_service.upload(
+        current_user.id, file, name=name, pipeline_settings=settings
+    )
     background_tasks.add_task(run_brd_parse_task, operation.operation_id)
     return operation
 
@@ -486,6 +511,26 @@ async def reparse_brd(
     operation = await brd_service.enqueue_reparse(current_user.id, brd_id)
     background_tasks.add_task(run_brd_parse_task, operation.operation_id)
     return operation
+
+
+@router.patch(
+    "/{brd_id}/pipeline-settings",
+    response_model=BrdDetailResponse,
+    summary="Update BRD pipeline settings",
+    description=(
+        "Update generation preferences (instructions, feature count, story style, etc.). "
+        "Takes effect on the next extract/generate run."
+    ),
+)
+async def update_pipeline_settings(
+    brd_id: int,
+    payload: BrdPipelineSettingsUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    brd_service: BrdService = Depends(get_brd_service),
+) -> BrdDetailResponse:
+    return await brd_service.update_pipeline_settings(
+        current_user.id, brd_id, payload.pipeline_settings
+    )
 
 
 @router.patch(

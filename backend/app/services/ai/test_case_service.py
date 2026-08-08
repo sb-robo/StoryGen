@@ -8,12 +8,14 @@ from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
 from app.db.models.brd_test_case import BrdTestCase, TestCaseStatus
+from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.operation_repository import OperationRepository
 from app.repositories.story_repository import StoryRepository, decode_acceptance_criteria
 from app.repositories.sub_feature_repository import SubFeatureRepository
 from app.repositories.test_case_repository import TestCaseRepository
 from app.schemas.operation_schema import OperationResponse
+from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.schemas.test_case_schema import (
     TestCaseGenerationResultResponse,
     TestCaseListResponse,
@@ -36,6 +38,7 @@ class TestCaseService:
         self.story_repo = StoryRepository(db)
         self.sub_feature_repo = SubFeatureRepository(db)
         self.feature_repo = FeatureRepository(db)
+        self.brd_repo = BrdRepository(db)
         self.operation_repo = OperationRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
 
@@ -123,12 +126,16 @@ class TestCaseService:
 
         brd_id = await self._brd_id_for_story(story)
         ac = decode_acceptance_criteria(story.acceptance_criteria)
+        brd = await self.brd_repo.get_by_id(brd_id)
 
         output = await generate_test_cases_for_story(
             self.openai_client,
             title=story.title,
             description=story.description,
             acceptance_criteria=ac,
+            pipeline_context=format_pipeline_context(
+                brd.pipeline_settings if brd else None, for_stage="tests"
+            ),
             operation_id=operation_id,
             user_id=operation.user_id,
             brd_id=brd_id,

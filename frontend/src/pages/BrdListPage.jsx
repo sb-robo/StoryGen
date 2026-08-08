@@ -5,9 +5,28 @@ import { BrdListProgress } from '../components/BrdListProgress'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { StatusBadge } from '../components/StatusBadge'
 import { useJobs } from '../context/JobsContext'
+import {
+  DEFAULT_PIPELINE_SETTINGS,
+  FEATURE_COUNT_OPTIONS,
+  POINTING_SCALE_OPTIONS,
+  STORY_STYLE_OPTIONS,
+  SUB_FEATURE_COUNT_OPTIONS,
+  TEST_DEPTH_OPTIONS,
+  serializePipelineSettings,
+} from '../utils/pipelineSettings'
 
 const ACCEPT =
   '.pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.xlsx']
+const MAX_UPLOAD_MB = 20
+
+function formatBytes(bytes) {
+  if (!bytes) return ''
+  const mb = bytes / (1024 * 1024)
+  if (mb >= 1) return `${mb.toFixed(1)} MB`
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
 
 export function BrdListPage() {
   const [brds, setBrds] = useState([])
@@ -19,7 +38,14 @@ export function BrdListPage() {
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [confirmAction, setConfirmAction] = useState(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState(DEFAULT_PIPELINE_SETTINGS)
   const { trackJob, runningCount } = useJobs()
+
+  function updateSetting(key, value) {
+    setSettings((prev) => ({ ...prev, [key]: value }))
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -44,11 +70,32 @@ export function BrdListPage() {
 
   function pickFile(next) {
     if (!next) return
+    const ext = `.${next.name.split('.').pop()?.toLowerCase()}`
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+      setError(`Unsupported file type "${ext}". Use PDF, DOCX, or XLSX.`)
+      return
+    }
+    setError('')
     setFile(next)
     if (!name.trim()) {
       const base = next.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim()
       if (base) setName(base)
     }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+    setDragOver(true)
+  }
+
+  function handleDragLeave() {
+    setDragOver(false)
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    setDragOver(false)
+    pickFile(e.dataTransfer.files?.[0] ?? null)
   }
 
   async function handleUpload(e) {
@@ -57,10 +104,12 @@ export function BrdListPage() {
     setUploading(true)
     setError('')
     try {
-      const op = await brdApi.uploadBrd(name.trim(), file)
+      const op = await brdApi.uploadBrd(name.trim(), file, serializePipelineSettings(settings))
       await trackJob(op, { label: 'Parse BRD' })
       setName('')
       setFile(null)
+      setSettings(DEFAULT_PIPELINE_SETTINGS)
+      setShowSettings(false)
       await load()
     } catch (err) {
       setError(err.message || 'Upload failed')
@@ -98,40 +147,234 @@ export function BrdListPage() {
 
       <section className="panel">
         <h2>Upload BRD</h2>
-        <form className="upload-form" onSubmit={handleUpload}>
-          <label className="field">
-            <span>Display name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Payments Platform BRD"
-              required
-            />
-          </label>
-          <label className="field">
-            <span>File</span>
-            <div className="file-field">
+        <div className="upload-panel-grid">
+          <form className="upload-form" onSubmit={handleUpload}>
+            <label className="field">
+              <span>Display name</span>
               <input
-                id="brd-file-input"
-                type="file"
-                accept={ACCEPT}
-                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
-                required={!file}
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Payments Platform BRD"
+                required
               />
-              <label htmlFor="brd-file-input" className="btn btn-secondary btn-sm file-field-btn">
-                Choose file
+            </label>
+            <div className="field upload-form-dropzone-field">
+              <span>File</span>
+              <label
+                htmlFor="brd-file-input"
+                className={`file-dropzone ${dragOver ? 'file-dropzone-active' : ''} ${file ? 'file-dropzone-filled' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <input
+                  id="brd-file-input"
+                  type="file"
+                  accept={ACCEPT}
+                  onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                  required={!file}
+                />
+                {file ? (
+                  <span className="file-dropzone-selected">
+                    <strong>{file.name}</strong>
+                    <span className="meta">{formatBytes(file.size)} · click or drop to replace</span>
+                  </span>
+                ) : (
+                  <span className="file-dropzone-hint">
+                    <strong>Drag &amp; drop your BRD here</strong>
+                    <span className="meta">or click to browse — PDF, DOCX, or XLSX, up to {MAX_UPLOAD_MB}MB</span>
+                  </span>
+                )}
               </label>
-              <span className="file-field-name meta">{file ? file.name : 'No file chosen'}</span>
             </div>
-          </label>
-          <div className="upload-form-actions">
-            <button type="submit" className="btn btn-primary" disabled={busy || !file}>
-              {busy ? 'Processing…' : 'Upload & parse'}
-            </button>
-          </div>
-        </form>
-        {error && <p className="form-error">{error}</p>}
+            <div className="upload-settings-toggle">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowSettings((v) => !v)}
+              >
+                {showSettings ? 'Hide generation preferences' : 'Generation preferences (optional)'}
+              </button>
+            </div>
+
+            {showSettings && (
+              <div className="pipeline-settings">
+                <label className="field">
+                  <span>Instructions for AI</span>
+                  <textarea
+                    value={settings.instructions}
+                    onChange={(e) => updateSetting('instructions', e.target.value)}
+                    placeholder="e.g. Ignore legal appendix. Focus on customer portal. Treat payments as out of scope."
+                    rows={3}
+                  />
+                </label>
+
+                <div className="pipeline-settings-grid">
+                  <label className="field">
+                    <span>Domain / product</span>
+                    <input
+                      type="text"
+                      value={settings.domain_context}
+                      onChange={(e) => updateSetting('domain_context', e.target.value)}
+                      placeholder="B2B SaaS billing for SMBs"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Personas / roles</span>
+                    <input
+                      type="text"
+                      value={settings.personas}
+                      onChange={(e) => updateSetting('personas', e.target.value)}
+                      placeholder="Admin, Merchant, End customer"
+                    />
+                  </label>
+                </div>
+
+                <div className="pipeline-settings-grid">
+                  <label className="field">
+                    <span>In scope</span>
+                    <textarea
+                      value={settings.in_scope}
+                      onChange={(e) => updateSetting('in_scope', e.target.value)}
+                      placeholder="Must cover auth, reporting, notifications…"
+                      rows={2}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Out of scope</span>
+                    <textarea
+                      value={settings.out_of_scope}
+                      onChange={(e) => updateSetting('out_of_scope', e.target.value)}
+                      placeholder="Mobile app, third-party marketplace…"
+                      rows={2}
+                    />
+                  </label>
+                </div>
+
+                <div className="pipeline-settings-grid">
+                  <label className="field">
+                    <span>Feature count</span>
+                    <select
+                      value={settings.feature_count}
+                      onChange={(e) => updateSetting('feature_count', e.target.value)}
+                    >
+                      {FEATURE_COUNT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Sub-feature count</span>
+                    <select
+                      value={settings.sub_feature_count}
+                      onChange={(e) => updateSetting('sub_feature_count', e.target.value)}
+                    >
+                      {SUB_FEATURE_COUNT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Story style</span>
+                    <select
+                      value={settings.story_style}
+                      onChange={(e) => updateSetting('story_style', e.target.value)}
+                    >
+                      {STORY_STYLE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Pointing scale</span>
+                    <select
+                      value={settings.pointing_scale}
+                      onChange={(e) => updateSetting('pointing_scale', e.target.value)}
+                    >
+                      {POINTING_SCALE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Test depth</span>
+                    <select
+                      value={settings.test_depth}
+                      onChange={(e) => updateSetting('test_depth', e.target.value)}
+                    >
+                      {TEST_DEPTH_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="pipeline-settings-grid">
+                  <label className="field">
+                    <span>Jira project key (export)</span>
+                    <input
+                      type="text"
+                      value={settings.export_project_key}
+                      onChange={(e) => updateSetting('export_project_key', e.target.value)}
+                      placeholder="PAY"
+                      maxLength={32}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Epic name prefix (export)</span>
+                    <input
+                      type="text"
+                      value={settings.export_epic_prefix}
+                      onChange={(e) => updateSetting('export_epic_prefix', e.target.value)}
+                      placeholder="Payments —"
+                      maxLength={64}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            <div className="upload-form-actions">
+              <button type="submit" className="btn btn-primary" disabled={busy || !file}>
+                {busy ? 'Processing…' : 'Upload & parse'}
+              </button>
+            </div>
+            {error && <p className="form-error">{error}</p>}
+          </form>
+
+          <aside className="upload-hints">
+            <div className="upload-hints-block">
+              <h3>Tips for better results</h3>
+              <ul>
+                <li>Use clear section headings — they map closely to extracted features.</li>
+                <li>Include acceptance criteria or business rules if you have them.</li>
+                <li>Tables and images in the document are parsed too; no need to flatten them.</li>
+              </ul>
+            </div>
+            <div className="upload-hints-block">
+              <h3>What happens next</h3>
+              <ol className="upload-hints-steps">
+                <li>Parse &amp; extract text</li>
+                <li>Extract features (you review)</li>
+                <li>Generate stories (you review)</li>
+                <li>Estimate points (you review)</li>
+                <li>Generate test cases (you review)</li>
+                <li>Export CSV / Jira CSV</li>
+              </ol>
+            </div>
+          </aside>
+        </div>
       </section>
 
       <section className="panel">
@@ -160,6 +403,9 @@ export function BrdListPage() {
                     <BrdListProgress brdId={brd.id} brdStatus={brd.status} />
                   </div>
                   <StatusBadge status={brd.status} />
+                  <span className="brd-list-chevron" aria-hidden="true">
+                    ›
+                  </span>
                 </Link>
                 <button
                   type="button"

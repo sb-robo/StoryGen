@@ -12,6 +12,8 @@ Description: {description}
 Acceptance criteria:
 {acceptance_criteria}
 
+{pipeline_context}
+
 Similar approved stories (for calibration):
 {similar_stories}
 """

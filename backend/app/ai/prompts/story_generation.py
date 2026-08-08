@@ -19,7 +19,9 @@ Title: {sub_feature_title}
 Description: {sub_feature_description}
 Source excerpt: {source_excerpt}
 
-Generate user stories for this sub-feature.
+{pipeline_context}
+
+Generate user stories for this sub-feature. Honor the story style and personas in the settings.
 """
 
 CRITIQUE_SYSTEM = """You critique user stories against INVEST criteria.

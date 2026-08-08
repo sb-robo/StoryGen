@@ -16,6 +16,7 @@ async def run_story_points_graph(
     title: str,
     description: str,
     acceptance_criteria: list[str],
+    pipeline_context: str = "",
     operation_id: str | None,
     max_iterations: int | None = None,
 ) -> StoryPointsEstimate:
@@ -37,6 +38,7 @@ async def run_story_points_graph(
         description=description,
         acceptance_criteria=acceptance_criteria,
         similar_stories=similar,
+        pipeline_context=pipeline_context,
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,

@@ -14,6 +14,8 @@ EXTRACT_USER = """Extract all product features from this BRD Markdown.
 
 BRD name: {brd_name}
 
+{pipeline_context}
+
 --- BRD CONTENT ---
 {brd_content}
 --- END ---
@@ -28,10 +30,13 @@ Flag missing areas that should become features. Be strict but avoid inventing fe
 CRITIQUE_USER = """BRD section headings / structure hints:
 {section_hints}
 
+{pipeline_context}
+
 Extracted features (titles only):
 {feature_titles}
 
 Does the feature list adequately cover the BRD? List any missing sections/topics.
+Respect out-of-scope settings — do not flag out-of-scope topics as missing.
 """
 
 REVISE_SYSTEM = """You revise a feature list based on completeness feedback while staying faithful to the BRD.
@@ -41,6 +46,8 @@ Merge duplicates, add missing features, and keep confidence/rationale fields acc
 REVISE_USER = """Original BRD excerpt (truncated):
 {brd_excerpt}
 
+{pipeline_context}
+
 Current features JSON:
 {current_features}
 
@@ -49,5 +56,5 @@ Completeness feedback:
 
 Missing sections to address: {missing_sections}
 
-Return the revised full feature list.
+Return the revised full feature list. Honor user pipeline settings.
 """

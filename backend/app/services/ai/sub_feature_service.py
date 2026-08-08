@@ -8,6 +8,7 @@ from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
+from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import (
     FeatureRepository,
     decode_clarifying_answers,
@@ -17,6 +18,7 @@ from app.repositories.feature_repository import (
 from app.repositories.operation_repository import OperationRepository
 from app.repositories.sub_feature_repository import SubFeatureRepository
 from app.schemas.operation_schema import OperationResponse
+from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.schemas.sub_feature_schema import (
     SubFeatureGenerationResultResponse,
     SubFeatureListResponse,
@@ -37,6 +39,7 @@ class SubFeatureService:
         self.db = db
         self.repo = SubFeatureRepository(db)
         self.feature_repo = FeatureRepository(db)
+        self.brd_repo = BrdRepository(db)
         self.operation_repo = OperationRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
 
@@ -126,6 +129,7 @@ class SubFeatureService:
         if not feature:
             return None
 
+        brd = await self.brd_repo.get_by_id(feature.brd_id)
         output = await generate_sub_features_from_feature(
             self.openai_client,
             feature_title=feature.title,
@@ -134,6 +138,9 @@ class SubFeatureService:
             clarifying_qa=format_clarifying_qa_for_prompt(
                 decode_clarifying_questions(feature.clarifying_questions),
                 decode_clarifying_answers(feature.clarifying_answers),
+            ),
+            pipeline_context=format_pipeline_context(
+                brd.pipeline_settings if brd else None, for_stage="sub_features"
             ),
             operation_id=operation_id,
             user_id=operation.user_id,

@@ -11,6 +11,7 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const resetSuccess = Boolean(location.state?.resetSuccess)
+  const passwordChanged = Boolean(location.state?.passwordChanged)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -50,6 +51,7 @@ export function LoginPage() {
             <Link to="/forgot-password">Forgot password?</Link>
           </p>
           {resetSuccess && <p className="form-success">Password reset. Sign in with your new password.</p>}
+          {passwordChanged && <p className="form-success">Password changed. Sign in with your new password.</p>}
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign in'}

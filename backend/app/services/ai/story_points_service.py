@@ -7,12 +7,14 @@ from app.ai.agents.story_points import estimate_story_points
 from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_story import BrdStory, PointsStatus, StoryReviewStatus
+from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.operation_repository import OperationRepository
 from app.repositories.story_embedding_repository import StoryEmbeddingRepository
 from app.repositories.story_repository import StoryRepository, decode_acceptance_criteria
 from app.repositories.sub_feature_repository import SubFeatureRepository
 from app.schemas.operation_schema import OperationResponse
+from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.schemas.story_schema import (
     StoryPointsResultResponse,
     StoryPointsReviewResponse,
@@ -34,6 +36,7 @@ class StoryPointsService:
         self.story_repo = StoryRepository(db)
         self.sub_feature_repo = SubFeatureRepository(db)
         self.feature_repo = FeatureRepository(db)
+        self.brd_repo = BrdRepository(db)
         self.operation_repo = OperationRepository(db)
         self.embedding_repo = StoryEmbeddingRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
@@ -102,6 +105,7 @@ class StoryPointsService:
 
         brd_id = await self._brd_id_for_story(story)
         ac = decode_acceptance_criteria(story.acceptance_criteria)
+        brd = await self.brd_repo.get_by_id(brd_id)
 
         estimate = await estimate_story_points(
             self.openai_client,
@@ -112,6 +116,9 @@ class StoryPointsService:
             title=story.title,
             description=story.description,
             acceptance_criteria=ac,
+            pipeline_context=format_pipeline_context(
+                brd.pipeline_settings if brd else None, for_stage="points"
+            ),
             operation_id=operation_id,
         )
 

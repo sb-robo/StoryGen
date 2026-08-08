@@ -15,7 +15,9 @@ Description: {description}
 Acceptance criteria:
 {acceptance_criteria}
 
-Generate test cases for this story.
+{pipeline_context}
+
+Generate test cases for this story. Honor the test depth preference in the settings.
 """
 
 CRITIQUE_SYSTEM = """You review test case coverage for a user story.
