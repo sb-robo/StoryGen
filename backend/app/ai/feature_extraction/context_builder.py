@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import OrderedDict
 
 from app.ai.feature_extraction.context import FeatureExtractionContext
+from app.ai.rag.chunk_retrieval import SimilarChunk, format_similar_chunks
+from app.core.config import settings
 from app.db.models.brd_chunk import BrdChunk
 from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.services.brd.storage_service import BrdStorageService
@@ -42,6 +44,23 @@ class FeatureExtractionContextBuilder:
             chunk_count=0,
         )
 
+    def build_from_retrieved(
+        self,
+        retrieved: list[SimilarChunk],
+        *,
+        total_chunk_count: int,
+        section_hints: str,
+    ) -> FeatureExtractionContext:
+        return FeatureExtractionContext(
+            brd_content=format_similar_chunks(
+                retrieved,
+                empty_message="(no relevant BRD chunks retrieved)",
+            ),
+            section_hints=section_hints,
+            source="retrieved_chunks",
+            chunk_count=total_chunk_count,
+        )
+
     def group_chunks_by_section(self, chunks: list[BrdChunk]) -> list[tuple[str, list[BrdChunk]]]:
         groups: OrderedDict[str, list[BrdChunk]] = OrderedDict()
         for chunk in chunks:
@@ -50,7 +69,17 @@ class FeatureExtractionContextBuilder:
         return list(groups.items())
 
     def should_map_reduce(self, context: FeatureExtractionContext, chunks: list[BrdChunk]) -> bool:
-        return context.uses_chunks and len(chunks) > MAP_REDUCE_CHUNK_THRESHOLD
+        return (
+            context.source == "chunks"
+            and len(chunks) > MAP_REDUCE_CHUNK_THRESHOLD
+        )
+
+    def should_use_retrieval(self, context: FeatureExtractionContext) -> bool:
+        """Prefer vector top-k when the BRD has many indexed chunks with embeddings."""
+        return (
+            context.uses_chunks
+            and context.chunk_count > settings.RAG_FEATURE_RETRIEVAL_THRESHOLD
+        )
 
     def format_chunk_group(self, section: str, chunks: list[BrdChunk]) -> str:
         return self._format_chunks(chunks, group_label=section)

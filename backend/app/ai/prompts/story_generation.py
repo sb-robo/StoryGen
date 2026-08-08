@@ -19,9 +19,13 @@ Title: {sub_feature_title}
 Description: {sub_feature_description}
 Source excerpt: {source_excerpt}
 
+Relevant BRD sections:
+{brd_context}
+
 {pipeline_context}
 
 Generate user stories for this sub-feature. Honor the story style and personas in the settings.
+Ground acceptance criteria in the BRD sections when they apply.
 """
 
 CRITIQUE_SYSTEM = """You critique user stories against INVEST criteria.

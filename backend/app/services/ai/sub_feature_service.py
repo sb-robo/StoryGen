@@ -8,6 +8,7 @@ from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
+from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import (
     FeatureRepository,
@@ -26,6 +27,7 @@ from app.schemas.sub_feature_schema import (
     SubFeatureReviewResponse,
     SubFeatureUpdateRequest,
 )
+from app.services.ai._chunk_context import fetch_brd_chunk_context
 from app.services.ai._helpers import ensure_operation_not_running, operation_response
 
 
@@ -40,6 +42,7 @@ class SubFeatureService:
         self.repo = SubFeatureRepository(db)
         self.feature_repo = FeatureRepository(db)
         self.brd_repo = BrdRepository(db)
+        self.chunk_repo = BrdChunkRepository(db)
         self.operation_repo = OperationRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
 
@@ -130,6 +133,16 @@ class SubFeatureService:
             return None
 
         brd = await self.brd_repo.get_by_id(feature.brd_id)
+        brd_context = await fetch_brd_chunk_context(
+            self.openai_client,
+            self.chunk_repo,
+            brd_id=feature.brd_id,
+            query_parts=[
+                feature.title,
+                feature.description,
+                feature.source_excerpt,
+            ],
+        )
         output = await generate_sub_features_from_feature(
             self.openai_client,
             feature_title=feature.title,
@@ -139,6 +152,7 @@ class SubFeatureService:
                 decode_clarifying_questions(feature.clarifying_questions),
                 decode_clarifying_answers(feature.clarifying_answers),
             ),
+            brd_context=brd_context,
             pipeline_context=format_pipeline_context(
                 brd.pipeline_settings if brd else None, for_stage="sub_features"
             ),

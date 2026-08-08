@@ -16,6 +16,30 @@ const ACCEPT =
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.xlsx']
 const MAX_UPLOAD_MB = 20
+const PAGE_SIZE = 10
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'parsed', label: 'Parsed' },
+  { value: 'parsing', label: 'Parsing' },
+  { value: 'uploaded', label: 'Uploaded' },
+  { value: 'parse_failed', label: 'Parse failed' },
+]
+
+const FILE_TYPE_OPTIONS = [
+  { value: '', label: 'All types' },
+  { value: '.pdf', label: 'PDF' },
+  { value: '.docx', label: 'DOCX' },
+  { value: '.xlsx', label: 'XLSX' },
+]
+
+const SORT_OPTIONS = [
+  { value: 'created_at:desc', label: 'Newest first' },
+  { value: 'created_at:asc', label: 'Oldest first' },
+  { value: 'name:asc', label: 'Name A–Z' },
+  { value: 'name:desc', label: 'Name Z–A' },
+  { value: 'updated_at:desc', label: 'Recently updated' },
+]
 
 function formatBytes(bytes) {
   if (!bytes) return ''
@@ -24,9 +48,25 @@ function formatBytes(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
+function parseSort(value) {
+  const [sort_by, sort_order] = value.split(':')
+  return { sort_by, sort_order }
+}
+
 export function BrdListPage() {
   const [brds, setBrds] = useState([])
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
+  const [hasPrev, setHasPrev] = useState(false)
+  const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [fileExtension, setFileExtension] = useState('')
+  const [sort, setSort] = useState('created_at:desc')
   const [trash, setTrash] = useState([])
+  const [trashTotal, setTrashTotal] = useState(0)
   const [showTrash, setShowTrash] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,26 +79,62 @@ export function BrdListPage() {
   const [settings, setSettings] = useState(DEFAULT_PIPELINE_SETTINGS)
   const { trackJob, runningCount } = useJobs()
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = searchInput.trim()
+      setSearch(next)
+      setPage(1)
+    }, 300)
+    return () => window.clearTimeout(handle)
+  }, [searchInput])
+
+  const loadActive = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [active, trashed] = await Promise.all([
-        brdApi.listBrds({ page_size: 50 }),
-        brdApi.listBrds({ page_size: 50, trashed: true }),
-      ])
-      setBrds(active.items)
-      setTrash(trashed.items)
+      const { sort_by, sort_order } = parseSort(sort)
+      const result = await brdApi.listBrds({
+        page,
+        page_size: PAGE_SIZE,
+        status: status || undefined,
+        search: search || undefined,
+        file_extension: fileExtension || undefined,
+        sort_by,
+        sort_order,
+      })
+      setBrds(result.items)
+      setTotal(result.total)
+      setTotalPages(result.total_pages)
+      setHasNext(result.has_next)
+      setHasPrev(result.has_prev)
     } catch (err) {
       setError(err.message || 'Failed to load BRDs')
     } finally {
       setLoading(false)
     }
+  }, [page, search, status, fileExtension, sort])
+
+  const loadTrash = useCallback(async () => {
+    try {
+      const trashed = await brdApi.listBrds({ page_size: 50, trashed: true })
+      setTrash(trashed.items)
+      setTrashTotal(trashed.total)
+    } catch {
+      // Trash is secondary; keep the active list usable if this fails.
+    }
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    loadActive()
+  }, [loadActive])
+
+  useEffect(() => {
+    loadTrash()
+  }, [loadTrash])
+
+  async function reloadAll() {
+    await Promise.all([loadActive(), loadTrash()])
+  }
 
   function pickFile(next) {
     if (!next) return
@@ -105,7 +181,8 @@ export function BrdListPage() {
       setFile(null)
       setSettings(DEFAULT_PIPELINE_SETTINGS)
       setShowSettings(false)
-      await load()
+      setPage(1)
+      await reloadAll()
     } catch (err) {
       setError(err.message || 'Upload failed')
     } finally {
@@ -121,7 +198,7 @@ export function BrdListPage() {
       if (type === 'trash') await brdApi.deleteBrd(brd.id)
       else if (type === 'restore') await brdApi.restoreBrd(brd.id)
       else if (type === 'purge') await brdApi.purgeBrd(brd.id)
-      await load()
+      await reloadAll()
     } catch (err) {
       setError(err.message || 'Action failed')
     } finally {
@@ -130,6 +207,8 @@ export function BrdListPage() {
   }
 
   const busy = uploading || runningCount > 0
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, total)
 
   return (
     <div className="page">
@@ -140,9 +219,9 @@ export function BrdListPage() {
         </div>
       </div>
 
-      <section className="panel">
-        <h2>Upload BRD</h2>
-        <div className="upload-panel-grid">
+      <div className="brd-home-layout">
+        <section className="panel brd-home-upload">
+          <h2>Upload BRD</h2>
           <form className="upload-form" onSubmit={handleUpload}>
             <label className="field">
               <span>Display name</span>
@@ -178,7 +257,9 @@ export function BrdListPage() {
                 ) : (
                   <span className="file-dropzone-hint">
                     <strong>Drag &amp; drop your BRD here</strong>
-                    <span className="meta">or click to browse — PDF, DOCX, or XLSX, up to {MAX_UPLOAD_MB}MB</span>
+                    <span className="meta">
+                      or click to browse — PDF, DOCX, or XLSX, up to {MAX_UPLOAD_MB}MB
+                    </span>
                   </span>
                 )}
               </label>
@@ -205,13 +286,13 @@ export function BrdListPage() {
             {error && <p className="form-error">{error}</p>}
           </form>
 
-          <aside className="upload-hints">
+          <aside className="upload-hints upload-hints-stacked">
             <div className="upload-hints-block">
               <h3>Tips for better results</h3>
               <ul>
                 <li>Use clear section headings — they map closely to extracted features.</li>
                 <li>Include acceptance criteria or business rules if you have them.</li>
-                <li>Tables and images in the document are parsed too; no need to flatten them.</li>
+                <li>Tables and images are parsed too; no need to flatten them.</li>
               </ul>
             </div>
             <div className="upload-hints-block">
@@ -226,112 +307,209 @@ export function BrdListPage() {
               </ol>
             </div>
           </aside>
-        </div>
-      </section>
+        </section>
 
-      <section className="panel">
-        <div className="panel-header-row">
-          <h2>Your BRDs</h2>
-          {trash.length > 0 && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setShowTrash((v) => !v)}
-            >
-              {showTrash ? 'Hide trash' : `Trash (${trash.length})`}
-            </button>
+        <section className="panel brd-home-list">
+          <div className="panel-header-row">
+            <h2>Your BRDs</h2>
+            {trashTotal > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowTrash((v) => !v)}
+              >
+                {showTrash ? 'Hide trash' : `Trash (${trashTotal})`}
+              </button>
+            )}
+          </div>
+
+          <div className="brd-list-filters">
+            <label className="field brd-list-search">
+              <span className="sr-only">Search BRDs</span>
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search name or filename…"
+              />
+            </label>
+            <label className="field">
+              <span className="sr-only">Status</span>
+              <select
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value)
+                  setPage(1)
+                }}
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value || 'all-status'} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="sr-only">File type</span>
+              <select
+                value={fileExtension}
+                onChange={(e) => {
+                  setFileExtension(e.target.value)
+                  setPage(1)
+                }}
+              >
+                {FILE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value || 'all-type'} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="sr-only">Sort</span>
+              <select
+                value={sort}
+                onChange={(e) => {
+                  setSort(e.target.value)
+                  setPage(1)
+                }}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {loading && <p className="empty-hint">Loading…</p>}
+          {!loading && brds.length === 0 && (
+            <p className="empty-hint">
+              {search || status || fileExtension
+                ? 'No BRDs match these filters.'
+                : 'No BRDs uploaded yet.'}
+            </p>
           )}
-        </div>
-        {loading && <p className="empty-hint">Loading…</p>}
-        {!loading && brds.length === 0 && <p className="empty-hint">No BRDs uploaded yet.</p>}
-        {!loading && brds.length > 0 && (
-          <ul className="brd-list">
-            {brds.map((brd) => (
-              <li key={brd.id} className="brd-list-row">
-                <Link to={`/brds/${brd.id}`} className="brd-list-item">
-                  <div>
-                    <strong>{brd.name}</strong>
-                    <span className="meta">{brd.original_filename}</span>
-                    <BrdListProgress brdId={brd.id} brdStatus={brd.status} />
-                  </div>
-                  <StatusBadge status={brd.status} />
-                  <span className="brd-list-chevron" aria-hidden="true">
-                    ›
-                  </span>
-                </Link>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm brd-row-action"
-                  onClick={() =>
-                    setConfirmAction({
-                      type: 'trash',
-                      brd,
-                      title: 'Move to trash?',
-                      message: `"${brd.name}" will be moved to trash. You can restore it later.`,
-                      confirmLabel: 'Move to trash',
-                      danger: true,
-                    })
-                  }
-                >
-                  Trash
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {showTrash && trash.length > 0 && (
-        <section className="panel">
-          <h2>Trash</h2>
-          <ul className="brd-list">
-            {trash.map((brd) => (
-              <li key={brd.id} className="brd-list-row">
-                <div className="brd-list-item brd-list-item-static">
-                  <div>
-                    <strong>{brd.name}</strong>
-                    <span className="meta">{brd.original_filename}</span>
-                  </div>
-                  <StatusBadge status={brd.status} />
-                </div>
-                <div className="brd-row-actions">
+          {!loading && brds.length > 0 && (
+            <ul className="brd-list">
+              {brds.map((brd) => (
+                <li key={brd.id} className="brd-list-row">
+                  <Link to={`/brds/${brd.id}`} className="brd-list-item">
+                    <div>
+                      <strong>{brd.name}</strong>
+                      <span className="meta">{brd.original_filename}</span>
+                      <BrdListProgress brdId={brd.id} brdStatus={brd.status} />
+                    </div>
+                    <StatusBadge status={brd.status} />
+                    <span className="brd-list-chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  </Link>
                   <button
                     type="button"
-                    className="btn btn-secondary btn-sm"
+                    className="btn btn-ghost btn-sm brd-row-action"
                     onClick={() =>
                       setConfirmAction({
-                        type: 'restore',
+                        type: 'trash',
                         brd,
-                        title: 'Restore BRD?',
-                        message: `"${brd.name}" will return to your active list.`,
-                        confirmLabel: 'Restore',
-                      })
-                    }
-                  >
-                    Restore
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-sm"
-                    onClick={() =>
-                      setConfirmAction({
-                        type: 'purge',
-                        brd,
-                        title: 'Delete permanently?',
-                        message: `"${brd.name}" and its files will be removed forever.`,
-                        confirmLabel: 'Delete forever',
+                        title: 'Move to trash?',
+                        message: `"${brd.name}" will be moved to trash. You can restore it later.`,
+                        confirmLabel: 'Move to trash',
                         danger: true,
                       })
                     }
                   >
-                    Delete forever
+                    Trash
                   </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {!loading && total > 0 && (
+            <div className="brd-list-pagination">
+              <span className="meta">
+                {rangeStart}–{rangeEnd} of {total}
+              </span>
+              <div className="brd-list-pagination-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!hasPrev}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span className="brd-list-page-label">
+                  Page {page}
+                  {totalPages ? ` / ${totalPages}` : ''}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!hasNext}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showTrash && trash.length > 0 && (
+            <div className="brd-trash-section">
+              <h3>Trash</h3>
+              <ul className="brd-list">
+                {trash.map((brd) => (
+                  <li key={brd.id} className="brd-list-row">
+                    <div className="brd-list-item brd-list-item-static">
+                      <div>
+                        <strong>{brd.name}</strong>
+                        <span className="meta">{brd.original_filename}</span>
+                      </div>
+                      <StatusBadge status={brd.status} />
+                    </div>
+                    <div className="brd-row-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() =>
+                          setConfirmAction({
+                            type: 'restore',
+                            brd,
+                            title: 'Restore BRD?',
+                            message: `"${brd.name}" will return to your active list.`,
+                            confirmLabel: 'Restore',
+                          })
+                        }
+                      >
+                        Restore
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        onClick={() =>
+                          setConfirmAction({
+                            type: 'purge',
+                            brd,
+                            title: 'Delete permanently?',
+                            message: `"${brd.name}" and its files will be removed forever.`,
+                            confirmLabel: 'Delete forever',
+                            danger: true,
+                          })
+                        }
+                      >
+                        Delete forever
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
-      )}
+      </div>
 
       {confirmAction && (
         <ConfirmModal

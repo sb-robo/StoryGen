@@ -15,9 +15,13 @@ Description: {description}
 Acceptance criteria:
 {acceptance_criteria}
 
+Relevant BRD sections:
+{brd_context}
+
 {pipeline_context}
 
 Generate test cases for this story. Honor the test depth preference in the settings.
+Use the BRD sections to ground edge cases and expected results when relevant.
 """
 
 CRITIQUE_SYSTEM = """You review test case coverage for a user story.

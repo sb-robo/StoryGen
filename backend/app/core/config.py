@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_EMBEDDING_DIMENSIONS: int = 1536
     RAG_SIMILAR_STORY_LIMIT: int = 5
+    RAG_SIMILAR_CHUNK_LIMIT: int = 8
+    RAG_FEATURE_CHUNK_LIMIT: int = 12
+    RAG_FEATURE_RETRIEVAL_THRESHOLD: int = 12
     LLM_MAX_RETRIES: int = 3
     LLM_TIMEOUT_SECONDS: int = 120
     LLM_MAX_ITERATIONS: int = 2

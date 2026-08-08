@@ -8,6 +8,7 @@ from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
 from app.db.models.brd_test_case import BrdTestCase, TestCaseStatus
+from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.operation_repository import OperationRepository
@@ -23,6 +24,7 @@ from app.schemas.test_case_schema import (
     TestCaseReviewResponse,
     TestCaseUpdateRequest,
 )
+from app.services.ai._chunk_context import fetch_brd_chunk_context
 from app.services.ai._helpers import ensure_operation_not_running, operation_response
 
 
@@ -39,6 +41,7 @@ class TestCaseService:
         self.sub_feature_repo = SubFeatureRepository(db)
         self.feature_repo = FeatureRepository(db)
         self.brd_repo = BrdRepository(db)
+        self.chunk_repo = BrdChunkRepository(db)
         self.operation_repo = OperationRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
 
@@ -127,12 +130,24 @@ class TestCaseService:
         brd_id = await self._brd_id_for_story(story)
         ac = decode_acceptance_criteria(story.acceptance_criteria)
         brd = await self.brd_repo.get_by_id(brd_id)
+        brd_context = await fetch_brd_chunk_context(
+            self.openai_client,
+            self.chunk_repo,
+            brd_id=brd_id,
+            query_parts=[
+                story.title,
+                story.description,
+                "\n".join(ac),
+                story.source_excerpt,
+            ],
+        )
 
         output = await generate_test_cases_for_story(
             self.openai_client,
             title=story.title,
             description=story.description,
             acceptance_criteria=ac,
+            brd_context=brd_context,
             pipeline_context=format_pipeline_context(
                 brd.pipeline_settings if brd else None, for_stage="tests"
             ),

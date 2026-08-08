@@ -9,9 +9,9 @@ class FeatureExtractionContext:
 
     brd_content: str
     section_hints: str
-    source: str  # "chunks" | "full_document"
+    source: str  # "chunks" | "retrieved_chunks" | "full_document"
     chunk_count: int = 0
 
     @property
     def uses_chunks(self) -> bool:
-        return self.source == "chunks"
+        return self.source in {"chunks", "retrieved_chunks"}

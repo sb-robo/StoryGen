@@ -2,9 +2,15 @@ import { api, apiDownload } from './client'
 
 export function listBrds(params = {}) {
   const query = new URLSearchParams()
-  if (params.page) query.set('page', params.page)
-  if (params.page_size) query.set('page_size', params.page_size)
+  if (params.page) query.set('page', String(params.page))
+  if (params.page_size) query.set('page_size', String(params.page_size))
   if (params.status) query.set('status', params.status)
+  if (params.search) query.set('search', params.search)
+  if (params.file_extension) query.set('file_extension', params.file_extension)
+  if (params.has_images === true) query.set('has_images', 'true')
+  if (params.has_images === false) query.set('has_images', 'false')
+  if (params.sort_by) query.set('sort_by', params.sort_by)
+  if (params.sort_order) query.set('sort_order', params.sort_order)
   if (params.trashed) query.set('trashed', 'true')
   const qs = query.toString()
   return api.get(`/brds${qs ? `?${qs}` : ''}`)

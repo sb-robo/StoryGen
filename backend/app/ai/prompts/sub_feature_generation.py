@@ -15,10 +15,14 @@ Title: {feature_title}
 Description: {feature_description}
 Source excerpt: {source_excerpt}
 
+Relevant BRD sections:
+{brd_context}
+
 {pipeline_context}
 
 Reviewer clarifying Q&A:
 {clarifying_qa}
 
 Generate sub-features for this approved feature. Honor the reviewer answers and pipeline settings above.
+Use the BRD sections to keep scope grounded in the source document.
 """
