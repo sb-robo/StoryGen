@@ -188,6 +188,10 @@ async def list_brds(
         default=BrdSortOrder.DESC,
         description="Sort direction",
     ),
+    trashed: bool = Query(
+        default=False,
+        description="If true, list soft-deleted BRDs in trash instead of active ones",
+    ),
     current_user: User = Depends(get_current_user),
     brd_service: BrdService = Depends(get_brd_service),
 ) -> BrdListResponse:
@@ -201,6 +205,7 @@ async def list_brds(
         has_images=has_images,
         created_from=created_from,
         created_to=created_to,
+        trashed=trashed,
         sort_by=sort_by.value,
         sort_order=sort_order.value,
     )
@@ -501,8 +506,8 @@ async def rename_brd(
 @router.delete(
     "/{brd_id}",
     response_model=BrdDeleteResponse,
-    summary="Delete a BRD",
-    description="Deletes the database row and all on-disk artifacts for this BRD.",
+    summary="Move a BRD to trash",
+    description="Soft-deletes the BRD. Use permanent delete to remove files.",
 )
 async def delete_brd(
     brd_id: int,
@@ -510,3 +515,30 @@ async def delete_brd(
     brd_service: BrdService = Depends(get_brd_service),
 ) -> BrdDeleteResponse:
     return await brd_service.delete_brd(current_user.id, brd_id)
+
+
+@router.post(
+    "/{brd_id}/restore",
+    response_model=BrdDetailResponse,
+    summary="Restore a BRD from trash",
+)
+async def restore_brd(
+    brd_id: int,
+    current_user: User = Depends(get_current_user),
+    brd_service: BrdService = Depends(get_brd_service),
+) -> BrdDetailResponse:
+    return await brd_service.restore_brd(current_user.id, brd_id)
+
+
+@router.delete(
+    "/{brd_id}/permanent",
+    response_model=BrdDeleteResponse,
+    summary="Permanently delete a trashed BRD",
+    description="Removes the database row and on-disk artifacts. BRD must already be in trash.",
+)
+async def purge_brd(
+    brd_id: int,
+    current_user: User = Depends(get_current_user),
+    brd_service: BrdService = Depends(get_brd_service),
+) -> BrdDeleteResponse:
+    return await brd_service.purge_brd(current_user.id, brd_id)

@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const resetSuccess = Boolean(location.state?.resetSuccess)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -44,6 +46,10 @@ export function LoginPage() {
               autoComplete="current-password"
             />
           </label>
+          <p className="auth-forgot">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
+          {resetSuccess && <p className="form-success">Password reset. Sign in with your new password.</p>}
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Signing in…' : 'Sign in'}

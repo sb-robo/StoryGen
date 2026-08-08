@@ -47,6 +47,34 @@ export async function approveQueueItem(item) {
   }
 }
 
+export async function rejectQueueItem(item) {
+  if (item?.type === ITEM_TYPES.POINTS) {
+    throw new Error('Story points cannot be rejected')
+  }
+  const entity = item.entity
+  switch (item.type) {
+    case ITEM_TYPES.FEATURE:
+      return featureApi.rejectFeature(entity.id)
+    case ITEM_TYPES.SUB_FEATURE:
+      return subFeatureApi.rejectSubFeature(entity.id)
+    case ITEM_TYPES.STORY:
+      return storyApi.rejectStory(entity.id)
+    case ITEM_TYPES.TEST_CASE:
+      return testCaseApi.rejectTestCase(entity.id)
+    default:
+      throw new Error(`Unsupported review type: ${item.type}`)
+  }
+}
+
+/** Next item after the current one in a filtered queue (prefer following, else previous). */
+export function nextQueueItem(filtered, currentItem) {
+  if (!filtered?.length || !currentItem) return null
+  const currentKey = queueItemKey(currentItem)
+  const index = filtered.findIndex((item) => queueItemKey(item) === currentKey)
+  if (index < 0) return filtered[0] ?? null
+  return filtered[index + 1] ?? filtered[index - 1] ?? null
+}
+
 /**
  * Approve items sequentially. Continues after individual failures.
  * @returns {{ ok: number, failed: Array<{ item: object, message: string }> }}

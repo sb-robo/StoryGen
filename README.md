@@ -1,235 +1,135 @@
-# 🚀 StoryGen
+# StoryGen
 
-> AI-powered software delivery planning tool that transforms BRDs into features, Jira stories, and test cases — with human review at every step.
+AI-powered software delivery planning tool that turns BRDs into features, stories, story points, and test cases — with human review at every step.
 
----
+## Overview
 
-## 📌 Overview
+StoryGen ingests Business Requirement Documents (PDF, DOCX, XLSX) and runs them through a structured AI pipeline:
 
-StoryGen is a full-stack AI-powered platform that ingests Business Requirement Documents (BRDs) and processes them through a structured, multi-step AI pipeline.
+1. Feature extraction  
+2. Sub-feature generation  
+3. User story generation  
+4. Story point estimation (RAG-calibrated when history exists)  
+5. Test case generation  
+6. CSV / Jira import CSV export  
 
-It generates:
+Each stage supports edit, approve, reject, and reopen before the next stage runs.
 
-* Features & sub-features
-* User stories
-* Story points
-* Test cases
-
-Each stage includes **human-in-the-loop validation**, ensuring accuracy, control, and production usability.
-
----
-
-## 🛠️ Tech Stack
+## Tech stack
 
 ### Backend
 
-* **Python 3.12+**
-* **FastAPI** — async REST APIs
-* **SQLAlchemy (async)** — ORM
-* **Alembic** — migrations
-* **PostgreSQL** — relational + vector-ready storage
-* **LiteLLM** — LLM abstraction (Azure GPT-4o)
-* **uv** — dependency & environment manager
-
-### AI Layer
-
-* Agent-based orchestration
-* Graph-based execution pipelines
-* RAG (Retrieval-Augmented Generation)
-* Prompt engineering modules
-* Stateful workflow management
+- Python 3.13+
+- FastAPI (async REST)
+- SQLAlchemy async + Alembic
+- PostgreSQL (+ pgvector for embeddings)
+- OpenAI SDK (chat + embeddings)
+- Docling (BRD parse)
+- uv (deps / env)
 
 ### Frontend
 
-* **React (Vite)**
-* **Tailwind CSS**
+- React 19 + Vite
+- Plain CSS (no Tailwind)
+- React Router
 
-### Dev Tooling
+### Optional / deferred
 
-* **Streamlit** — internal testing & rapid AI prototyping
+- `streamlit_app/` — placeholder for a future prompt lab (not wired yet)
 
----
-
-## 📂 Project Structure
+## Project structure
 
 ```
 storygen/
-├── architecture/
-│   └── PROJECT_STRUCTURE.md
+├── architecture/          # plans and design notes
 ├── backend/
 │   ├── alembic/
-│   │   ├── README
-│   │   ├── env.py
-│   │   └── script.py.mako
-│   ├── app/
-│   │   ├── ai/
-│   │   │   ├── agents/
-│   │   │   ├── graphs/
-│   │   │   ├── nodes/
-│   │   │   ├── prompts/
-│   │   │   ├── rag/
-│   │   │   └── states/
-│   │   ├── api/
-│   │   │   └── v1/
-│   │   │       └── routers/
-│   │   ├── core/
-│   │   ├── db/
-│   │   │   └── models/
-│   │   ├── repositories/
-│   │   ├── schemas/
-│   │   ├── services/
-│   │   ├── utils/
-│   │   └── main.py
-│   └── alembic.ini
+│   └── app/
+│       ├── ai/            # agents, prompts, RAG helpers
+│       ├── api/v1/        # routers
+│       ├── core/
+│       ├── db/
+│       ├── repositories/
+│       ├── schemas/
+│       └── services/
 ├── frontend/
-│   ├── public/
 │   └── src/
-│       └── assets/
-├── streamlit_app/
-│   └── app.py
-├── .python-version
-├── .gitignore
+├── streamlit_app/         # empty / deferred
+├── docker-compose.yml     # local Postgres (+ pgvector)
 ├── pyproject.toml
 └── README.md
 ```
 
----
-
-## ⚙️ Setup Instructions
+## Setup
 
 ### Prerequisites
 
-* Python 3.12+
-* Node.js 18+
-* PostgreSQL (running locally)
-* `uv` installed → https://docs.astral.sh/uv/
+- Python 3.13+
+- Node.js 18+
+- PostgreSQL with pgvector (easiest: `docker compose up -d` from repo root)
+- [uv](https://docs.astral.sh/uv/)
 
----
-
-## 🔧 Backend Setup
+### Backend
 
 ```bash
-git clone <your-repo-url>
-cd storygen/backend
-```
-
-### Install dependencies
-
-```bash
-uv sync
-```
-
-### Create `.env`
-
-```env
-DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/storygen
-```
-
-### Run migrations
-
-```bash
+cd storygen
+uv sync --group dev
+cp backend/.env.example backend/.env
+# Edit DATABASE_URL, SECRET_KEY, OPENAI_API_KEY
+# Keep AUTH_DISABLED=false unless you intentionally want local auth bypass
 uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --app-dir backend
 ```
 
-### Start server
+Or from `backend/` with `PYTHONPATH` set appropriately — the repo root `pyproject.toml` already points pytest at `backend/`.
+
+- API: http://localhost:8000  
+- Docs: http://localhost:8000/docs  
+- Health: http://localhost:8000/health  
+
+### Frontend
 
 ```bash
-uv run uvicorn app.main:app --reload
-```
-
-* API → http://localhost:8000
-* Docs → http://localhost:8000/docs
-
----
-
-## 💻 Frontend Setup
-
-```bash
-cd storygen/frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-* UI → http://localhost:5173
+- UI: http://localhost:5173  
 
----
+Set `VITE_API_ORIGIN` if the API is not on the same host (defaults to relative `/api/v1` via Vite proxy if configured).
 
-## 🧪 Streamlit (Internal Tooling)
+## Auth notes
+
+- Register / login / refresh / logout are implemented.
+- Forgot password returns a `reset_token` only when `DEBUG=true` (no email sender yet). Use that token on `/reset-password`.
+- With `AUTH_DISABLED=true` and `DEBUG=true`, Bearer auth is bypassed for local convenience — do not use in production.
+
+## AI pipeline flow
+
+```
+BRD upload & parse
+    → features (review)
+    → sub-features (review)
+    → stories (review)
+    → story points (review)
+    → test cases (review)
+    → export CSV / Jira CSV
+```
+
+## Tests
 
 ```bash
-cd storygen/streamlit_app
-uv run streamlit run app.py
-```
-
-Used for:
-
-* Testing AI pipelines
-* Debugging prompts
-* Rapid prototyping
-
----
-
-## 🗄️ Database
-
-* PostgreSQL with async driver (`asyncpg`)
-* Supports:
-
-  * Relational data
-  * Vector embeddings (for RAG)
-* Managed via Alembic migrations
-
-### Commands
-
-```bash
-uv run alembic revision --autogenerate -m "message"
-uv run alembic upgrade head
-```
-
----
-
-## 🔄 AI Pipeline Flow
-
-```
-BRD Upload
-    ↓
-Feature Extraction (AI)
-    ↓
-Review & Edit (Human)
-    ↓
-Sub-feature Generation (AI)
-    ↓
-Review & Edit (Human)
-    ↓
-Story Generation (AI)
-    ↓
-Review + Story Points (Human)
-    ↓
-Export → Jira / CSV
-```
-
----
-
-## 🧪 Running Tests
-
-```bash
-cd backend
 uv run pytest
 ```
 
----
+## Best practices
 
-## 📌 Best Practices
+- Do not commit `.env`
+- Prefer `uv add` over bare `pip install`
+- Commit `uv.lock`
+- Keep API → services → repositories → DB separation
 
-* Do not commit `.env`
-* Use `uv add` instead of `pip install`
-* Commit `uv.lock` for reproducibility
-* Keep AI logic modular inside `app/ai`
-* Maintain strict separation:
+## Author
 
-  * API → Services → Repositories → DB
-
----
-
-## 👨‍💻 Author
-
-**Suraj Biswas**
+Suraj Biswas

@@ -123,13 +123,32 @@ export function computePipelineState({ brdStatus, features, subFeatures, stories
     export: {
       id: 'export',
       status: storyCounts.approved === 0 ? 'locked' : 'ready',
-      counts: { total: storyCounts.approved, approved: storyCounts.approved },
+      counts: {
+        total: storyCounts.approved,
+        approved: storyCounts.approved,
+        approved_stories: storyCounts.approved,
+        approved_tests: testCaseCounts.approved,
+      },
       pending: 0,
       lockReason: storyCounts.approved === 0 ? 'Approve at least one story first' : null,
     },
   }
 
   return { stages, featureCounts, subFeatureCounts, storyCounts, testCaseCounts, pointsCounts }
+}
+
+/** Ready-to-export counts for UI copy. */
+export function getExportReadiness({ stories = [], testCases = [] } = {}) {
+  const approvedStories = stories.filter((s) => s.status === 'approved').length
+  const approvedTests = testCases.filter((t) => t.status === 'approved').length
+  return { approvedStories, approvedTests }
+}
+
+export function exportReadinessLabel({ approvedStories, approvedTests }) {
+  if (approvedStories <= 0) return 'Approve at least one story to export'
+  const storyPart = `${approvedStories} approved stor${approvedStories === 1 ? 'y' : 'ies'}`
+  const testPart = `${approvedTests} approved test${approvedTests === 1 ? '' : 's'}`
+  return `${storyPart} · ${testPart}`
 }
 
 export function buildReviewQueue({ features, subFeatures, stories, testCases, parents }) {
@@ -355,8 +374,10 @@ export function getSuggestedStep({ brdStatus, pipeline, reviewQueue }) {
   }
 
   if (stages.export.status !== 'locked') {
+    const storiesReady = stages.export.counts?.approved_stories ?? stages.export.counts?.approved ?? 0
+    const testsReady = stages.export.counts?.approved_tests ?? 0
     return {
-      label: 'Export approved stories as CSV',
+      label: `Export CSV (${storiesReady} stor${storiesReady === 1 ? 'y' : 'ies'}, ${testsReady} test${testsReady === 1 ? '' : 's'})`,
       action: 'export_csv',
       stageId: 'export',
     }
@@ -382,7 +403,7 @@ function stageForQueueItem(type) {
   }
 }
 
-export function getBatchActions({ pipeline, features, subFeatures, stories }) {
+export function getBatchActions({ pipeline, features, subFeatures, stories, testCases = [] }) {
   const actions = []
   const { stages } = pipeline
 
@@ -428,15 +449,18 @@ export function getBatchActions({ pipeline, features, subFeatures, stories }) {
   }
 
   if (approvedStories.length > 0 && stages.export?.status !== 'locked') {
+    const { approvedTests } = getExportReadiness({ stories, testCases })
     actions.push({
       id: 'export_csv',
       label: 'Export CSV',
       count: approvedStories.length,
+      detail: exportReadinessLabel({ approvedStories: approvedStories.length, approvedTests }),
     })
     actions.push({
       id: 'export_jira',
       label: 'Export Jira CSV',
       count: approvedStories.length,
+      detail: exportReadinessLabel({ approvedStories: approvedStories.length, approvedTests }),
     })
   }
 

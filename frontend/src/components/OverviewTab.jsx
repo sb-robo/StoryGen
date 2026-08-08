@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PIPELINE_STAGES } from '../utils/pipeline'
+import { exportReadinessLabel, PIPELINE_STAGES } from '../utils/pipeline'
 
 const VISIBLE_BLOCKERS = 3
 
@@ -55,11 +55,14 @@ export function OverviewTab({
   suggestedStep,
   recentJobs,
   batchActions,
+  exportReadiness,
   busy,
   onGoToQueue,
   onSuggestedAction,
   onBatchAction,
 }) {
+  const exportReady = pipeline?.stages?.export?.status === 'ready'
+
   return (
     <section className="overview-tab">
       <div className="overview-stack">
@@ -77,6 +80,13 @@ export function OverviewTab({
             </button>
           )}
         </div>
+
+        {exportReady && exportReadiness && (
+          <div className="overview-section">
+            <h3>Export readiness</h3>
+            <p className="overview-suggestion">{exportReadinessLabel(exportReadiness)}</p>
+          </div>
+        )}
 
         <div className="overview-section overview-attention">
           <h2>Needs your attention</h2>
@@ -121,6 +131,7 @@ export function OverviewTab({
                   className="btn btn-secondary btn-sm"
                   onClick={() => onBatchAction(action.id)}
                   disabled={busy || action.disabled}
+                  title={action.detail || undefined}
                 >
                   {action.label}
                   {action.count != null && ` (${action.count})`}

@@ -128,11 +128,11 @@ async def test_enqueue_reparse_rejects_when_already_parsing():
 
 
 @pytest.mark.asyncio
-async def test_delete_brd_also_cleans_up_operation_history():
+async def test_delete_brd_soft_deletes_without_purging_files():
     repo = MagicMock()
-    brd = MagicMock(id=1, user_id=1)
+    brd = MagicMock(id=1, user_id=1, deleted_at=None)
     repo.get_by_id_for_user = AsyncMock(return_value=brd)
-    repo.delete = AsyncMock()
+    repo.soft_delete = AsyncMock(return_value=brd)
     service = _service_with_repo(repo)
     service.storage.delete_brd_dir = AsyncMock()
     service.operation_repo.delete_for_resource = AsyncMock()
@@ -140,6 +140,27 @@ async def test_delete_brd_also_cleans_up_operation_history():
     result = await service.delete_brd(user_id=1, brd_id=1)
 
     assert result.id == 1
+    assert "trash" in result.message.lower()
+    repo.soft_delete.assert_awaited_once_with(brd)
+    service.storage.delete_brd_dir.assert_not_awaited()
+    service.operation_repo.delete_for_resource.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_purge_brd_cleans_up_files_and_operation_history():
+    repo = MagicMock()
+    brd = MagicMock(id=1, user_id=1, deleted_at="2026-08-08T00:00:00Z")
+    repo.get_by_id_for_user = AsyncMock(return_value=brd)
+    repo.delete = AsyncMock()
+    service = _service_with_repo(repo)
+    service.storage.delete_brd_dir = AsyncMock()
+    service.operation_repo.delete_for_resource = AsyncMock()
+
+    result = await service.purge_brd(user_id=1, brd_id=1)
+
+    assert result.id == 1
+    service.storage.delete_brd_dir.assert_awaited_once_with(1, 1)
+    repo.delete.assert_awaited_once_with(brd)
     service.operation_repo.delete_for_resource.assert_awaited_once_with(1, "brd", 1)
 
 

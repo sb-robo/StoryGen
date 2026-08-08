@@ -5,6 +5,7 @@ export function listBrds(params = {}) {
   if (params.page) query.set('page', params.page)
   if (params.page_size) query.set('page_size', params.page_size)
   if (params.status) query.set('status', params.status)
+  if (params.trashed) query.set('trashed', 'true')
   const qs = query.toString()
   return api.get(`/brds${qs ? `?${qs}` : ''}`)
 }
@@ -55,6 +56,14 @@ export function reparseBrd(id) {
 
 export function deleteBrd(id) {
   return api.delete(`/brds/${id}`)
+}
+
+export function restoreBrd(id) {
+  return api.post(`/brds/${id}/restore`)
+}
+
+export function purgeBrd(id) {
+  return api.delete(`/brds/${id}/permanent`)
 }
 
 async function downloadExport(brdId, format) {

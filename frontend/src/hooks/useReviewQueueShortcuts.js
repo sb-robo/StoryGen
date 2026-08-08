@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
+import { ITEM_TYPES } from '../utils/pipeline'
 import { filterReviewQueue, queueItemKey } from '../utils/reviewActions'
 
 /**
- * Queue tab shortcuts: j/k (or arrows) navigate, a approve current item.
+ * Queue tab shortcuts: j/k navigate, a approve, r reject, e edit.
  * Ignored while focus is in an editable field.
  */
 export function useReviewQueueShortcuts({
@@ -13,6 +14,8 @@ export function useReviewQueueShortcuts({
   selectedItem,
   onSelect,
   onApprove,
+  onReject,
+  onEdit,
   busy,
 }) {
   useEffect(() => {
@@ -53,15 +56,40 @@ export function useReviewQueueShortcuts({
       }
 
       if (key === 'a' || key === 'A') {
-        if (!selectedItem) return
-        // Only approve when the selected item is still in the filtered queue
-        if (currentIndex < 0) return
+        if (!selectedItem || currentIndex < 0) return
         event.preventDefault()
-        onApprove(selectedItem)
+        onApprove?.(selectedItem)
+        return
+      }
+
+      if (key === 'r' || key === 'R') {
+        if (!selectedItem || currentIndex < 0) return
+        if (selectedItem.type === ITEM_TYPES.POINTS) return
+        event.preventDefault()
+        onReject?.(selectedItem)
+        return
+      }
+
+      if (key === 'e' || key === 'E') {
+        if (!selectedItem || currentIndex < 0) return
+        if (selectedItem.type === ITEM_TYPES.POINTS) return
+        event.preventDefault()
+        onEdit?.(selectedItem)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [enabled, items, typeFilter, parentFilter, selectedItem, onSelect, onApprove, busy])
+  }, [
+    enabled,
+    items,
+    typeFilter,
+    parentFilter,
+    selectedItem,
+    onSelect,
+    onApprove,
+    onReject,
+    onEdit,
+    busy,
+  ])
 }

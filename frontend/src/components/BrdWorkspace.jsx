@@ -7,11 +7,19 @@ import { runBatchAction } from '../utils/batchActions'
 import {
   getBatchActions,
   getBlockers,
+  getExportReadiness,
   getSuggestedStep,
   ITEM_TYPES,
   regenerateConfirmMessage,
 } from '../utils/pipeline'
-import { approveQueueItem, approveQueueItems, queueItemKey } from '../utils/reviewActions'
+import {
+  approveQueueItem,
+  approveQueueItems,
+  filterReviewQueue,
+  nextQueueItem,
+  queueItemKey,
+  rejectQueueItem,
+} from '../utils/reviewActions'
 import { ConfirmModal } from './ConfirmModal'
 import { DetailPanel } from './DetailPanel'
 import { OverviewTab } from './OverviewTab'
@@ -50,6 +58,8 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   const [autoSelectedForBrdId, setAutoSelectedForBrdId] = useState(null)
   const [bulkStatus, setBulkStatus] = useState(null)
   const [regenConfirm, setRegenConfirm] = useState(null)
+  const [pendingSelectKey, setPendingSelectKey] = useState(null)
+  const [editRequestKey, setEditRequestKey] = useState(null)
 
   // Reset selection when navigating to a different BRD, and auto-select the
   // first feature the first time features become available for a BRD, so the
@@ -74,8 +84,23 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     }
   }
 
+  // After approve/reject-and-continue, select the next queue item once data reloads.
+  useEffect(() => {
+    if (!pendingSelectKey || loading) return
+    if (pendingSelectKey === '__none__') {
+      setSelectedItem(null)
+      setPendingSelectKey(null)
+      return
+    }
+    const found = reviewQueue.find((item) => queueItemKey(item) === pendingSelectKey)
+    setSelectedItem(found ?? reviewQueue[0] ?? null)
+    setPendingSelectKey(null)
+    if (found || reviewQueue.length > 0) setWorkspaceTab('queue')
+  }, [pendingSelectKey, reviewQueue, loading])
+
   // Keep the detail panel's entity in sync after approve/reject/reopen reloads.
   useEffect(() => {
+    if (pendingSelectKey) return
     if (!selectedItem?.entity) return
     const { type, entity } = selectedItem
     let fresh = null
@@ -100,16 +125,29 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
         entity: fresh,
       }
     })
-  }, [features, subFeatures, stories, testCases, selectedItem])
+  }, [features, subFeatures, stories, testCases, selectedItem, pendingSelectKey])
 
   const blockers = useMemo(() => getBlockers(features ?? []), [features])
+  const exportReadiness = useMemo(
+    () => getExportReadiness({ stories: stories ?? [], testCases: testCases ?? [] }),
+    [stories, testCases],
+  )
   const suggestedStep = useMemo(
     () => getSuggestedStep({ brdStatus: brd.status, pipeline, reviewQueue }),
     [brd.status, pipeline, reviewQueue],
   )
   const batchActions = useMemo(
-    () => (pipeline ? getBatchActions({ pipeline, features: features ?? [], subFeatures: subFeatures ?? [], stories: stories ?? [] }) : []),
-    [pipeline, features, subFeatures, stories],
+    () =>
+      pipeline
+        ? getBatchActions({
+            pipeline,
+            features: features ?? [],
+            subFeatures: subFeatures ?? [],
+            stories: stories ?? [],
+            testCases: testCases ?? [],
+          })
+        : [],
+    [pipeline, features, subFeatures, stories, testCases],
   )
   const recentJobs = useMemo(
     () => jobs.filter((j) => j.brdId === brdId || j.brdId == null).slice(0, 5),
@@ -167,16 +205,17 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   const handleApproveItem = useCallback(
     async (item) => {
       if (!item) return
+      const filtered = filterReviewQueue(reviewQueue, queueFilter, parentFilter)
+      const next = nextQueueItem(filtered, item)
       setBusy(true)
       setBulkStatus(null)
       try {
         await approveQueueItem(item)
-        setSelectedItem((current) =>
-          queueItemKey(current) === queueItemKey(item) ? null : current,
-        )
+        setPendingSelectKey(next ? queueItemKey(next) : '__none__')
         await reload()
         await onRefreshBrd?.()
       } catch (err) {
+        setPendingSelectKey(null)
         setBulkStatus({
           failed: 1,
           message: err?.message || 'Approve failed',
@@ -185,8 +224,39 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
         setBusy(false)
       }
     },
-    [reload, onRefreshBrd],
+    [reload, onRefreshBrd, reviewQueue, queueFilter, parentFilter],
   )
+
+  const handleRejectItem = useCallback(
+    async (item) => {
+      if (!item || item.type === ITEM_TYPES.POINTS) return
+      const filtered = filterReviewQueue(reviewQueue, queueFilter, parentFilter)
+      const next = nextQueueItem(filtered, item)
+      setBusy(true)
+      setBulkStatus(null)
+      try {
+        await rejectQueueItem(item)
+        setPendingSelectKey(next ? queueItemKey(next) : '__none__')
+        await reload()
+        await onRefreshBrd?.()
+      } catch (err) {
+        setPendingSelectKey(null)
+        setBulkStatus({
+          failed: 1,
+          message: err?.message || 'Reject failed',
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [reload, onRefreshBrd, reviewQueue, queueFilter, parentFilter],
+  )
+
+  const handleEditItem = useCallback((item) => {
+    if (!item || item.type === ITEM_TYPES.POINTS) return
+    setSelectedItem(item)
+    setEditRequestKey(queueItemKey(item))
+  }, [])
 
   async function handleBulkApprove(items) {
     if (!items?.length || busy) return
@@ -195,13 +265,15 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     try {
       const { ok, failed } = await approveQueueItems(items)
       const failedKeys = new Set(failed.map((f) => queueItemKey(f.item)))
-      setSelectedItem((current) => {
-        const selectedKey = queueItemKey(current)
-        if (!selectedKey) return current
-        const wasTargeted = items.some((item) => queueItemKey(item) === selectedKey)
-        if (wasTargeted && !failedKeys.has(selectedKey)) return null
-        return current
-      })
+      const nextAfterBulk = items
+        .map((item, index) => ({ item, index }))
+        .reverse()
+        .find(({ item }) => !failedKeys.has(queueItemKey(item)))
+      if (nextAfterBulk) {
+        const filtered = filterReviewQueue(reviewQueue, queueFilter, parentFilter)
+        const next = nextQueueItem(filtered, nextAfterBulk.item)
+        setPendingSelectKey(next ? queueItemKey(next) : '__none__')
+      }
       if (failed.length === 0) {
         setBulkStatus({ failed: 0, message: `Approved ${ok} item${ok !== 1 ? 's' : ''}.` })
       } else {
@@ -224,6 +296,8 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     selectedItem,
     onSelect: setSelectedItem,
     onApprove: handleApproveItem,
+    onReject: handleRejectItem,
+    onEdit: handleEditItem,
     busy: busy || loading,
   })
 
@@ -398,6 +472,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
         onStageClick={handleStageClick}
         onPrimaryAction={handlePrimaryAction}
         busy={busy || loading}
+        exportReadiness={exportReadiness}
       />
 
       {!brdReady && (
@@ -469,6 +544,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                   suggestedStep={suggestedStep}
                   recentJobs={recentJobs}
                   batchActions={batchActions}
+                  exportReadiness={exportReadiness}
                   busy={busy || loading}
                   onGoToQueue={() => {
                     setWorkspaceTab('queue')
@@ -503,6 +579,10 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                 onRefresh={refreshAll}
                 onSelectItem={setSelectedItem}
                 onRunJob={handleRunJob}
+                onApprove={() => handleApproveItem(selectedItem)}
+                onReject={() => handleRejectItem(selectedItem)}
+                editRequestKey={editRequestKey}
+                onEditRequestHandled={() => setEditRequestKey(null)}
                 parents={parents}
                 wide={detailInMiddle}
               />

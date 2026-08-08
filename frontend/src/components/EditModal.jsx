@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useDialogA11y } from '../hooks/useDialogA11y'
 
-export function EditModal({ title, fields, onSave, onClose, layered = false }) {
+export function EditModal({ title, fields, onSave, onClose }) {
+  const dialogRef = useDialogA11y({ onClose })
   const [values, setValues] = useState(() =>
     Object.fromEntries(fields.map((f) => [f.name, f.value ?? ''])),
   )
@@ -33,11 +35,18 @@ export function EditModal({ title, fields, onSave, onClose, layered = false }) {
   }
 
   return (
-    <div className={`modal-backdrop${layered ? ' modal-backdrop-layered' : ''}`} onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{title}</h3>
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        ref={dialogRef}
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-modal-title"
+      >
+        <h3 id="edit-modal-title">{title}</h3>
         <form onSubmit={handleSubmit}>
-          {fields.map((field) => (
+          {fields.map((field, index) => (
             <label key={field.name} className="field">
               <span>{field.label}</span>
               {field.type === 'textarea' || field.type === 'lines' ? (
@@ -46,6 +55,7 @@ export function EditModal({ title, fields, onSave, onClose, layered = false }) {
                   value={values[field.name]}
                   onChange={(e) => setValues({ ...values, [field.name]: e.target.value })}
                   placeholder={field.placeholder}
+                  data-initial-focus={index === 0 ? true : undefined}
                 />
               ) : (
                 <input
@@ -54,6 +64,7 @@ export function EditModal({ title, fields, onSave, onClose, layered = false }) {
                   onChange={(e) => setValues({ ...values, [field.name]: e.target.value })}
                   min={field.min}
                   max={field.max}
+                  data-initial-focus={index === 0 ? true : undefined}
                 />
               )}
             </label>

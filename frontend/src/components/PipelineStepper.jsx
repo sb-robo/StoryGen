@@ -1,4 +1,4 @@
-import { PIPELINE_STAGES } from '../utils/pipeline'
+import { exportReadinessLabel, PIPELINE_STAGES } from '../utils/pipeline'
 
 function StepIndicator({ status, pending }) {
   if (status === 'complete') return <span className="step-icon step-complete">✓</span>
@@ -10,7 +10,10 @@ function StepIndicator({ status, pending }) {
   return <span className="step-icon step-empty">○</span>
 }
 
-function stepLabel(stage, stageData) {
+function stepLabel(stage, stageData, exportReadiness) {
+  if (stage.id === 'export' && stageData.status === 'ready' && exportReadiness) {
+    return `Export (${exportReadiness.approvedStories}S · ${exportReadiness.approvedTests}T)`
+  }
   if (stageData.status === 'needs_review') return `${stage.label} (${stageData.pending})`
   if (stageData.status === 'complete') return `${stage.label} ✓`
   if (stageData.status === 'ready') return stage.label
@@ -21,7 +24,7 @@ function stepLabel(stage, stageData) {
   return stage.label
 }
 
-export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAction, busy }) {
+export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAction, busy, exportReadiness }) {
   if (!stages) return null
 
   return (
@@ -54,6 +57,11 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
           else if (stage.id === 'tests' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
           else if (stage.id === 'export') ctaLabel = 'Export CSV'
 
+          const exportTitle =
+            stage.id === 'export' && exportReadiness
+              ? exportReadinessLabel(exportReadiness)
+              : stageData.lockReason || undefined
+
           return (
             <li key={stage.id} className="stepper-item">
               {index > 0 && <span className="stepper-connector" aria-hidden="true" />}
@@ -61,11 +69,11 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
                 type="button"
                 className={`stepper-step ${isActive ? 'step-active' : ''} step-${stageData.status}`}
                 onClick={() => onStageClick?.(stage.id)}
-                title={stageData.lockReason || undefined}
+                title={exportTitle}
                 disabled={isLocked && stage.id !== 'parse'}
               >
                 <StepIndicator status={stageData.status} pending={stageData.pending} />
-                <span className="stepper-label">{stepLabel(stage, stageData)}</span>
+                <span className="stepper-label">{stepLabel(stage, stageData, exportReadiness)}</span>
               </button>
               {showCta && ctaLabel && (
                 <button
@@ -73,6 +81,7 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
                   className="btn btn-primary btn-sm stepper-cta"
                   onClick={() => onPrimaryAction?.(stage.id)}
                   disabled={busy}
+                  title={stage.id === 'export' ? exportTitle : undefined}
                 >
                   {ctaLabel}
                 </button>

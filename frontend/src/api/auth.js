@@ -31,3 +31,15 @@ export async function logout() {
 export async function getMe() {
   return api.get('/users/me')
 }
+
+export function forgotPassword(email) {
+  return api.post('/auth/forgot-password', { email }, { auth: false })
+}
+
+export function resetPassword(token, password, confirm_password) {
+  return api.post(
+    '/auth/reset-password',
+    { token, password, confirm_password },
+    { auth: false },
+  )
+}

@@ -137,8 +137,12 @@ class BrdService:
                 ),
             )
 
-    async def _get_owned_brd(self, user_id: int, brd_id: int) -> BrdDocument:
-        brd = await self.repo.get_by_id_for_user(brd_id, user_id)
+    async def _get_owned_brd(
+        self, user_id: int, brd_id: int, *, include_deleted: bool = False
+    ) -> BrdDocument:
+        brd = await self.repo.get_by_id_for_user(
+            brd_id, user_id, include_deleted=include_deleted
+        )
         if not brd:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -372,6 +376,7 @@ class BrdService:
         has_images: bool | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
+        trashed: bool = False,
         sort_by: str = "created_at",
         sort_order: str = "desc",
     ) -> BrdListResponse:
@@ -389,6 +394,7 @@ class BrdService:
             "has_images": has_images,
             "created_from": created_from,
             "created_to": created_to,
+            "trashed": trashed,
         }
         items = await self.repo.list_for_user(
             user_id,
@@ -491,12 +497,42 @@ class BrdService:
         return await self._to_detail(brd, include_text=False)
 
     async def delete_brd(self, user_id: int, brd_id: int) -> BrdDeleteResponse:
+        """Soft-delete: hide from lists but keep files/DB row for restore."""
         brd = await self._get_owned_brd(user_id, brd_id)
+        await self.repo.soft_delete(brd)
+        return BrdDeleteResponse(id=brd_id, message="BRD moved to trash")
+
+    async def restore_brd(self, user_id: int, brd_id: int) -> BrdDetailResponse:
+        brd = await self._get_owned_brd(user_id, brd_id, include_deleted=True)
+        if brd.deleted_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="BRD is not in trash.",
+            )
+        conflict = await self.repo.find_by_name_for_user(user_id, brd.name, exclude_id=brd.id)
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot restore: an active BRD named '{brd.name}' already exists. "
+                    "Rename or delete it first."
+                ),
+            )
+        brd = await self.repo.restore(brd)
+        return await self._to_detail(brd, include_text=False)
+
+    async def purge_brd(self, user_id: int, brd_id: int) -> BrdDeleteResponse:
+        """Permanently delete a trashed BRD (files + row)."""
+        brd = await self._get_owned_brd(user_id, brd_id, include_deleted=True)
+        if brd.deleted_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Move the BRD to trash before permanently deleting it.",
+            )
         await self.storage.delete_brd_dir(user_id, brd_id)
         await self.repo.delete(brd)
-        # Avoid leaving dangling operation history pointing at a deleted BRD.
         await self.operation_repo.delete_for_resource(user_id, "brd", brd_id)
-        return BrdDeleteResponse(id=brd_id)
+        return BrdDeleteResponse(id=brd_id, message="BRD permanently deleted")
 
     async def _preview(self, brd: BrdDocument) -> str | None:
         text = await self.storage.read_parsed_markdown(brd.parsed_text_path)

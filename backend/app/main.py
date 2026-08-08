@@ -1,9 +1,13 @@
+from logging import getLogger
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from logging import getLogger
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.v1 import api
 from app.core.config import apply_huggingface_token, apply_openai_settings, settings
+from app.db.session import async_session_local
 
 logger = getLogger(__name__)
 ROUTE_PREFIX = "/api/v1"
@@ -18,6 +22,33 @@ app.add_middleware(
 )
 
 app.include_router(api.router, prefix=ROUTE_PREFIX)
+
+
+@app.get("/health", tags=["Health"], summary="Liveness / readiness check")
+async def health():
+    """Returns API status and a lightweight database ping."""
+    db_ok = False
+    db_error = None
+    try:
+        async with async_session_local() as session:
+            await session.execute(text("SELECT 1"))
+            db_ok = True
+    except Exception as exc:
+        db_error = str(exc)
+        logger.warning("Health check DB ping failed: %s", exc)
+
+    payload = {
+        "status": "ok" if db_ok else "degraded",
+        "api": "ok",
+        "database": "ok" if db_ok else "error",
+    }
+    if db_error and settings.DEBUG:
+        payload["database_error"] = db_error
+
+    return JSONResponse(
+        status_code=200 if db_ok else 503,
+        content=payload,
+    )
 
 
 @app.on_event("startup")

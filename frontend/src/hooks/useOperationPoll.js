@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, apiFetch } from '../api/client'
 import { resolveUrl } from '../api/config'
 
@@ -103,50 +102,4 @@ async function watchOperationSse(operationId, { onUpdate } = {}) {
 
   if (!sawReady) throw new Error('SSE stream closed unexpectedly')
   throw new Error('SSE ended before operation completed')
-}
-
-export function useOperationPoll() {
-  const [operation, setOperation] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const cancelledRef = useRef(false)
-
-  const reset = useCallback(() => {
-    cancelledRef.current = true
-    setOperation(null)
-    setError(null)
-    setLoading(false)
-  }, [])
-
-  const startPoll = useCallback(async (op) => {
-    cancelledRef.current = false
-    setLoading(true)
-    setError(null)
-    setOperation(op)
-
-    try {
-      const finalStatus = await watchOperation(op.operation_id, op.status_url, {
-        onUpdate: (status) => {
-          if (!cancelledRef.current) setOperation(status)
-        },
-      })
-      if (cancelledRef.current) return null
-
-      const result = await api.get(resolveUrl(finalStatus.result_url))
-      setLoading(false)
-      return result
-    } catch (err) {
-      if (!cancelledRef.current) {
-        setError(err.message || 'Operation failed')
-        setLoading(false)
-      }
-      return null
-    }
-  }, [])
-
-  useEffect(() => () => {
-    cancelledRef.current = true
-  }, [])
-
-  return { operation, error, loading, startPoll, reset }
 }

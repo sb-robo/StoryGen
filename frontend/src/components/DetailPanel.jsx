@@ -14,7 +14,20 @@ import { StatusBadge } from './StatusBadge'
 import { StoryDetailTabs } from './StoryDetailTabs'
 import { SubFeatureTile } from './SubFeatureTile'
 
-export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRunJob, parents, wide }) {
+export function DetailPanel({
+  item,
+  busy,
+  onClose,
+  onRefresh,
+  onSelectItem,
+  onRunJob,
+  onApprove,
+  onReject,
+  editRequestKey,
+  onEditRequestHandled,
+  parents,
+  wide,
+}) {
   const [editItem, setEditItem] = useState(null)
   const [showRationale, setShowRationale] = useState(false)
   const [childCount, setChildCount] = useState(null)
@@ -32,6 +45,16 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
     setReviewError(null)
     setRegenConfirm(null)
   }
+
+  useEffect(() => {
+    if (!item || !editRequestKey || editRequestKey !== itemKey) return
+    if (item.type === ITEM_TYPES.POINTS) {
+      onEditRequestHandled?.()
+      return
+    }
+    setEditItem(item.entity)
+    onEditRequestHandled?.()
+  }, [editRequestKey, item, itemKey, onEditRequestHandled])
 
   if (!item) {
     return (
@@ -55,6 +78,14 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
       }
     }
     try {
+      if (action === 'approve' && onApprove) {
+        await onApprove()
+        return
+      }
+      if (action === 'reject' && onReject) {
+        await onReject()
+        return
+      }
       switch (item.type) {
         case ITEM_TYPES.FEATURE:
           if (action === 'approve') await featureApi.approveFeature(entity.id)

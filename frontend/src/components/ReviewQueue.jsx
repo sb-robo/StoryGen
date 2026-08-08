@@ -90,7 +90,24 @@ export function ReviewQueue({
         <div>
           <h2>Review queue</h2>
           <p className="queue-shortcuts-hint meta">
-            Shortcuts: <kbd>j</kbd>/<kbd>k</kbd> navigate · <kbd>a</kbd> approve
+            <span className="queue-shortcut">
+              <kbd>j</kbd>
+              <span className="queue-shortcut-sep">/</span>
+              <kbd>k</kbd>
+              <span className="queue-shortcut-label">navigate</span>
+            </span>
+            <span className="queue-shortcut">
+              <kbd>a</kbd>
+              <span className="queue-shortcut-label">approve</span>
+            </span>
+            <span className="queue-shortcut">
+              <kbd>r</kbd>
+              <span className="queue-shortcut-label">reject</span>
+            </span>
+            <span className="queue-shortcut">
+              <kbd>e</kbd>
+              <span className="queue-shortcut-label">edit</span>
+            </span>
           </p>
         </div>
         <span className="meta">
@@ -181,11 +198,21 @@ export function ReviewQueue({
                 <th className="queue-check-col" scope="col">
                   <span className="sr-only">Select</span>
                 </th>
-                <th>Item</th>
-                <th>Type</th>
-                <th>Path</th>
-                <th>Confidence</th>
-                <th>Status</th>
+                <th className="queue-title-col" scope="col">
+                  Item
+                </th>
+                <th className="queue-type-col" scope="col">
+                  Type
+                </th>
+                <th className="queue-path-col" scope="col">
+                  Path
+                </th>
+                <th className="queue-conf-col" scope="col">
+                  Conf.
+                </th>
+                <th className="queue-status-col" scope="col">
+                  Status
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -195,6 +222,7 @@ export function ReviewQueue({
                 const isChecked = checkedKeys.has(key)
                 const unanswered =
                   item.type === ITEM_TYPES.FEATURE ? unansweredClarifyingCount(item.entity) : 0
+                const path = item.pathLabel || item.parentLabel || '—'
                 return (
                   <tr
                     key={key}
@@ -224,20 +252,29 @@ export function ReviewQueue({
                         onChange={(e) => toggleKey(key, e.target.checked)}
                       />
                     </td>
-                    <td className="queue-title">
-                      {item.title}
-                      {unanswered > 0 && (
-                        <span className="queue-blocker-hint meta">
-                          {unanswered} clarifying Q unanswered — approve blocked
-                        </span>
-                      )}
+                    <td className="queue-title" title={item.title}>
+                      <div className="queue-title-inner">
+                        <span className="queue-title-text">{item.title}</span>
+                        {unanswered > 0 && (
+                          <span
+                            className="queue-blocker-chip"
+                            title={`${unanswered} clarifying question${unanswered !== 1 ? 's' : ''} unanswered — approve blocked`}
+                          >
+                            {unanswered}Q
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td>{typeLabel(item.type)}</td>
-                    <td className="queue-parent" title={item.pathLabel || item.parentLabel}>
-                      {item.pathLabel || item.parentLabel}
+                    <td className="queue-type" title={typeLabel(item.type)}>
+                      {typeLabel(item.type)}
                     </td>
-                    <td>{item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '—'}</td>
-                    <td>
+                    <td className="queue-parent" title={path}>
+                      {path}
+                    </td>
+                    <td className="queue-conf">
+                      {item.confidence != null ? `${(item.confidence * 100).toFixed(0)}%` : '—'}
+                    </td>
+                    <td className="queue-status">
                       <StatusBadge status={item.status} />
                     </td>
                   </tr>
