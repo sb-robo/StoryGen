@@ -107,6 +107,19 @@ async def reject_story(
 
 
 @router.post(
+    "/{story_id}/reopen",
+    response_model=StoryReviewResponse,
+    summary="Reopen a rejected user story to pending_review",
+)
+async def reopen_story(
+    story_id: int,
+    current_user: User = Depends(get_current_user),
+    story_service: StoryService = Depends(get_story_service),
+) -> StoryReviewResponse:
+    return await story_service.reopen_story(current_user.id, story_id)
+
+
+@router.post(
     "/{story_id}/points/estimate",
     response_model=OperationResponse,
     status_code=status.HTTP_202_ACCEPTED,

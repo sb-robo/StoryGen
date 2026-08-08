@@ -178,6 +178,17 @@ class OperationService:
                 },
             )
 
+        if operation.status == OperationStatus.CANCELLED.value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Operation was cancelled",
+                    "operation_id": operation.id,
+                    "status": operation.status,
+                    "error_message": operation.error_message,
+                },
+            )
+
         if operation.resource_id is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -271,4 +282,70 @@ class OperationService:
             resource_type=operation.resource_type,
             resource_id=operation.resource_id,
             result=brd_detail.model_dump(mode="json"),
+        )
+
+    async def cancel_operation(
+        self, user_id: int, operation_id: str
+    ) -> OperationResponse:
+        operation = await self._get_owned_operation(user_id, operation_id)
+        if operation.status not in {
+            OperationStatus.PENDING.value,
+            OperationStatus.RUNNING.value,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only pending or running operations can be cancelled.",
+            )
+        operation = await self.repo.mark_cancelled(operation)
+        await self.db.commit()
+        return self._to_response(operation)
+
+    async def retry_operation(
+        self, user_id: int, operation_id: str
+    ) -> OperationResponse:
+        """
+        Enqueue a fresh operation for the same type/resource as a failed/cancelled one.
+        Caller must schedule the matching background task.
+        """
+        operation = await self._get_owned_operation(user_id, operation_id)
+        if operation.status not in {
+            OperationStatus.FAILED.value,
+            OperationStatus.CANCELLED.value,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only failed or cancelled operations can be retried.",
+            )
+        if operation.resource_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Operation has no resource to retry against.",
+            )
+
+        op_type = operation.operation_type
+        resource_id = operation.resource_id
+
+        if op_type == OperationType.FEATURE_EXTRACTION.value:
+            return await self.feature_service.enqueue_extraction(user_id, resource_id)
+        if op_type == OperationType.SUB_FEATURE_GENERATION.value:
+            return await self.sub_feature_service.enqueue_generation(
+                user_id, resource_id
+            )
+        if op_type == OperationType.STORY_GENERATION.value:
+            return await self.story_service.enqueue_generation(user_id, resource_id)
+        if op_type == OperationType.STORY_POINT_ESTIMATION.value:
+            return await self.story_points_service.enqueue_estimation(
+                user_id, resource_id
+            )
+        if op_type == OperationType.TEST_CASE_GENERATION.value:
+            return await self.test_case_service.enqueue_generation(user_id, resource_id)
+        if op_type in {
+            OperationType.BRD_UPLOAD.value,
+            OperationType.BRD_REPARSE.value,
+        }:
+            return await self.brd_service.enqueue_reparse(user_id, resource_id)
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Retry is not supported for operation type '{op_type}'.",
         )

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { typeLabel } from '../utils/pipeline'
+import { ITEM_TYPES, typeLabel, unansweredClarifyingCount } from '../utils/pipeline'
 import { filterReviewQueue, queueItemKey } from '../utils/reviewActions'
 import { StatusBadge } from './StatusBadge'
 
@@ -193,6 +193,8 @@ export function ReviewQueue({
                 const key = queueItemKey(item)
                 const isSelected = selectedKey === key
                 const isChecked = checkedKeys.has(key)
+                const unanswered =
+                  item.type === ITEM_TYPES.FEATURE ? unansweredClarifyingCount(item.entity) : 0
                 return (
                   <tr
                     key={key}
@@ -200,6 +202,7 @@ export function ReviewQueue({
                       'queue-row',
                       isSelected ? 'queue-row-selected' : '',
                       isChecked ? 'queue-row-checked' : '',
+                      unanswered > 0 ? 'queue-row-blocked' : '',
                     ]
                       .filter(Boolean)
                       .join(' ')}
@@ -221,7 +224,14 @@ export function ReviewQueue({
                         onChange={(e) => toggleKey(key, e.target.checked)}
                       />
                     </td>
-                    <td className="queue-title">{item.title}</td>
+                    <td className="queue-title">
+                      {item.title}
+                      {unanswered > 0 && (
+                        <span className="queue-blocker-hint meta">
+                          {unanswered} clarifying Q unanswered — approve blocked
+                        </span>
+                      )}
+                    </td>
                     <td>{typeLabel(item.type)}</td>
                     <td className="queue-parent" title={item.pathLabel || item.parentLabel}>
                       {item.pathLabel || item.parentLabel}

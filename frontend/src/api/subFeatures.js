@@ -20,6 +20,10 @@ export function rejectSubFeature(id) {
   return api.post(`/sub-features/${id}/reject`)
 }
 
+export function reopenSubFeature(id) {
+  return api.post(`/sub-features/${id}/reopen`)
+}
+
 export function generateStories(subFeatureId) {
   return api.post(`/sub-features/${subFeatureId}/stories/generate`)
 }

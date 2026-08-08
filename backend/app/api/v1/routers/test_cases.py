@@ -52,3 +52,16 @@ async def reject_test_case(
     test_case_service: TestCaseService = Depends(get_test_case_service),
 ) -> TestCaseReviewResponse:
     return await test_case_service.reject_test_case(current_user.id, test_case_id)
+
+
+@router.post(
+    "/{test_case_id}/reopen",
+    response_model=TestCaseReviewResponse,
+    summary="Reopen a rejected test case to pending_review",
+)
+async def reopen_test_case(
+    test_case_id: int,
+    current_user: User = Depends(get_current_user),
+    test_case_service: TestCaseService = Depends(get_test_case_service),
+) -> TestCaseReviewResponse:
+    return await test_case_service.reopen_test_case(current_user.id, test_case_id)

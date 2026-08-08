@@ -1,11 +1,18 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as brdApi from '../api/brds'
 import { useJobs } from '../context/JobsContext'
 import { useBrdPipeline } from '../hooks/useBrdPipeline'
 import { useReviewQueueShortcuts } from '../hooks/useReviewQueueShortcuts'
 import { runBatchAction } from '../utils/batchActions'
-import { getBatchActions, getBlockers, getSuggestedStep, ITEM_TYPES } from '../utils/pipeline'
+import {
+  getBatchActions,
+  getBlockers,
+  getSuggestedStep,
+  ITEM_TYPES,
+  regenerateConfirmMessage,
+} from '../utils/pipeline'
 import { approveQueueItem, approveQueueItems, queueItemKey } from '../utils/reviewActions'
+import { ConfirmModal } from './ConfirmModal'
 import { DetailPanel } from './DetailPanel'
 import { OverviewTab } from './OverviewTab'
 import { ParsedContentModal } from './ParsedContentModal'
@@ -42,6 +49,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   const [trackedBrdId, setTrackedBrdId] = useState(brdId)
   const [autoSelectedForBrdId, setAutoSelectedForBrdId] = useState(null)
   const [bulkStatus, setBulkStatus] = useState(null)
+  const [regenConfirm, setRegenConfirm] = useState(null)
 
   // Reset selection when navigating to a different BRD, and auto-select the
   // first feature the first time features become available for a BRD, so the
@@ -65,6 +73,34 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       })
     }
   }
+
+  // Keep the detail panel's entity in sync after approve/reject/reopen reloads.
+  useEffect(() => {
+    if (!selectedItem?.entity) return
+    const { type, entity } = selectedItem
+    let fresh = null
+    if (type === ITEM_TYPES.FEATURE) fresh = (features ?? []).find((f) => f.id === entity.id)
+    else if (type === ITEM_TYPES.SUB_FEATURE) {
+      fresh = (subFeatures ?? []).find((sf) => sf.id === entity.id)
+    } else if (type === ITEM_TYPES.STORY || type === ITEM_TYPES.POINTS) {
+      fresh = (stories ?? []).find((s) => s.id === entity.id)
+    } else if (type === ITEM_TYPES.TEST_CASE) {
+      fresh = (testCases ?? []).find((tc) => tc.id === entity.id)
+    }
+    if (!fresh) return
+    const nextStatus = type === ITEM_TYPES.POINTS ? fresh.points_status : fresh.status
+    if (fresh === entity && nextStatus === selectedItem.status) return
+    setSelectedItem((current) => {
+      if (!current || queueItemKey(current) !== queueItemKey(selectedItem)) return current
+      return {
+        ...current,
+        title: fresh.title,
+        status: nextStatus,
+        confidence: fresh.confidence ?? null,
+        entity: fresh,
+      }
+    })
+  }, [features, subFeatures, stories, testCases, selectedItem])
 
   const blockers = useMemo(() => getBlockers(features ?? []), [features])
   const suggestedStep = useMemo(
@@ -191,7 +227,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     busy: busy || loading,
   })
 
-  async function handleBatchAction(actionId) {
+  async function executeBatchAction(actionId) {
     if (actionId === 'export_csv') {
       await handleExport('csv')
       return
@@ -211,6 +247,18 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function handleBatchAction(actionId) {
+    if (actionId === 'extract_features' && (features?.length ?? 0) > 0) {
+      setRegenConfirm({
+        title: 'Regenerate features?',
+        message: regenerateConfirmMessage('features'),
+        actionId,
+      })
+      return
+    }
+    await executeBatchAction(actionId)
   }
 
   async function handlePrimaryAction(stageId) {
@@ -331,6 +379,16 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
           content={brd.parsed_text ?? fullContent}
           loading={loadingFullContent}
           onClose={() => setShowContentModal(false)}
+        />
+      )}
+
+      {regenConfirm && (
+        <ConfirmModal
+          title={regenConfirm.title}
+          message={regenConfirm.message}
+          confirmLabel="Regenerate"
+          onConfirm={() => executeBatchAction(regenConfirm.actionId)}
+          onClose={() => setRegenConfirm(null)}
         />
       )}
 

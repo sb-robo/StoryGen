@@ -208,11 +208,15 @@ class OperationRepository:
         return list(result.scalars().all())
 
     async def mark_running(self, operation: AsyncOperation) -> AsyncOperation:
+        if operation.status == OperationStatus.CANCELLED.value:
+            return operation
         operation.status = OperationStatus.RUNNING.value
         operation.error_message = None
         return await self.update(operation)
 
     async def mark_succeeded(self, operation: AsyncOperation) -> AsyncOperation:
+        if operation.status == OperationStatus.CANCELLED.value:
+            return operation
         operation.status = OperationStatus.SUCCEEDED.value
         operation.error_message = None
         operation.completed_at = datetime.now(timezone.utc)
@@ -221,8 +225,18 @@ class OperationRepository:
     async def mark_failed(
         self, operation: AsyncOperation, error_message: str
     ) -> AsyncOperation:
+        if operation.status == OperationStatus.CANCELLED.value:
+            return operation
         operation.status = OperationStatus.FAILED.value
         operation.error_message = error_message
+        operation.completed_at = datetime.now(timezone.utc)
+        return await self.update(operation)
+
+    async def mark_cancelled(
+        self, operation: AsyncOperation, *, reason: str | None = None
+    ) -> AsyncOperation:
+        operation.status = OperationStatus.CANCELLED.value
+        operation.error_message = reason or "Cancelled by user"
         operation.completed_at = datetime.now(timezone.utc)
         return await self.update(operation)
 

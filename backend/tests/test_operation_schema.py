@@ -25,6 +25,9 @@ def test_operation_response_urls_and_done_flag():
     done = running.model_copy(update={"status": "succeeded"})
     assert done.done is True
 
+    cancelled = running.model_copy(update={"status": "cancelled"})
+    assert cancelled.done is True
+
 
 def test_operation_response_urls_for_feature_extraction():
     now = datetime.now(timezone.utc)

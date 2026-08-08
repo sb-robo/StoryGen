@@ -127,3 +127,31 @@ def test_list_operations_admin_filters_by_user(admin_client, mock_operation_serv
     assert response.status_code == 200
     kwargs = mock_operation_service.list_operations_admin.await_args.kwargs
     assert kwargs["user_id"] == 9
+
+
+def test_cancel_operation(user_client, mock_operation_service):
+    mock_operation_service.cancel_operation = AsyncMock(
+        return_value=_op(status="cancelled", user_id=None)
+    )
+
+    response = user_client.post(
+        "/api/v1/operations/11111111-1111-1111-1111-111111111111/cancel"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    mock_operation_service.cancel_operation.assert_awaited_once()
+
+
+def test_retry_operation(user_client, mock_operation_service):
+    mock_operation_service.retry_operation = AsyncMock(
+        return_value=_op(status="pending", user_id=None)
+    )
+
+    response = user_client.post(
+        "/api/v1/operations/11111111-1111-1111-1111-111111111111/retry"
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    mock_operation_service.retry_operation.assert_awaited_once()

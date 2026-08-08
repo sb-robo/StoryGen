@@ -103,6 +103,21 @@ async def reject_sub_feature(
 
 
 @router.post(
+    "/{sub_feature_id}/reopen",
+    response_model=SubFeatureReviewResponse,
+    summary="Reopen a rejected sub-feature to pending_review",
+)
+async def reopen_sub_feature(
+    sub_feature_id: int,
+    current_user: User = Depends(get_current_user),
+    sub_feature_service: SubFeatureService = Depends(get_sub_feature_service),
+) -> SubFeatureReviewResponse:
+    return await sub_feature_service.reopen_sub_feature(
+        current_user.id, sub_feature_id
+    )
+
+
+@router.post(
     "/{sub_feature_id}/stories/generate",
     response_model=OperationResponse,
     status_code=status.HTTP_202_ACCEPTED,

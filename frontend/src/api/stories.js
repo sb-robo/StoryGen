@@ -20,6 +20,10 @@ export function rejectStory(id) {
   return api.post(`/stories/${id}/reject`)
 }
 
+export function reopenStory(id) {
+  return api.post(`/stories/${id}/reopen`)
+}
+
 export function estimatePoints(storyId) {
   return api.post(`/stories/${storyId}/points/estimate`)
 }

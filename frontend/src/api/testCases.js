@@ -11,3 +11,7 @@ export function approveTestCase(id) {
 export function rejectTestCase(id) {
   return api.post(`/test-cases/${id}/reject`)
 }
+
+export function reopenTestCase(id) {
+  return api.post(`/test-cases/${id}/reopen`)
+}

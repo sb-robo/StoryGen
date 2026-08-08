@@ -273,16 +273,36 @@ export function getTotalPending(pipeline) {
   )
 }
 
+export function unansweredClarifyingCount(feature) {
+  if (!feature) return 0
+  const questionCount = feature.clarifying_questions?.length ?? 0
+  const answerCount = feature.clarifying_answers?.length ?? 0
+  return Math.max(0, questionCount - answerCount)
+}
+
+export function clarifyingApproveBlockMessage(feature) {
+  const unanswered = unansweredClarifyingCount(feature)
+  if (unanswered <= 0) return null
+  return `Answer clarifying questions before approving (${unanswered} unanswered).`
+}
+
+/** Copy for regenerate confirmations — approved/rejected children are kept. */
+export function regenerateConfirmMessage(childLabel = 'items') {
+  return (
+    `This replaces draft and pending_review ${childLabel}. ` +
+    `Approved and rejected ${childLabel} are kept.`
+  )
+}
+
 export function getBlockers(features) {
   const blockers = []
   for (const feature of features) {
-    const questionCount = feature.clarifying_questions?.length ?? 0
-    const answerCount = feature.clarifying_answers?.length ?? 0
-    if (questionCount > 0 && answerCount < questionCount) {
+    const unanswered = unansweredClarifyingCount(feature)
+    if (unanswered > 0) {
       blockers.push({
         id: feature.id,
         featureTitle: feature.title,
-        unanswered: questionCount - answerCount,
+        unanswered,
       })
     }
   }

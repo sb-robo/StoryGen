@@ -3,10 +3,11 @@ import * as featureApi from '../api/features'
 import * as subFeatureApi from '../api/subFeatures'
 import * as storyApi from '../api/stories'
 import * as testCaseApi from '../api/testCases'
-import { ITEM_TYPES } from '../utils/pipeline'
+import { clarifyingApproveBlockMessage, ITEM_TYPES, regenerateConfirmMessage } from '../utils/pipeline'
 import { buildAncestorPath, nodeToItem } from '../utils/lineage'
 import { Breadcrumb } from './Breadcrumb'
 import { ClarifyingAnswersForm } from './ClarifyingAnswersForm'
+import { ConfirmModal } from './ConfirmModal'
 import { EditModal } from './EditModal'
 import { ReviewActions } from './ReviewCard'
 import { StatusBadge } from './StatusBadge'
@@ -17,6 +18,8 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
   const [editItem, setEditItem] = useState(null)
   const [showRationale, setShowRationale] = useState(false)
   const [childCount, setChildCount] = useState(null)
+  const [reviewError, setReviewError] = useState(null)
+  const [regenConfirm, setRegenConfirm] = useState(null)
   const itemKey = item ? `${item.type}:${item.id}` : null
   const [trackedItemKey, setTrackedItemKey] = useState(itemKey)
   const rootClassName = `detail-panel ${wide ? 'detail-panel-wide' : ''}`
@@ -26,6 +29,8 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
   if (trackedItemKey !== itemKey) {
     setTrackedItemKey(itemKey)
     setChildCount(null)
+    setReviewError(null)
+    setRegenConfirm(null)
   }
 
   if (!item) {
@@ -41,30 +46,67 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
   const parentNode = breadcrumbPath.length > 1 ? breadcrumbPath[breadcrumbPath.length - 2] : null
 
   async function handleReview(action) {
-    switch (item.type) {
-      case ITEM_TYPES.FEATURE:
-        if (action === 'approve') await featureApi.approveFeature(entity.id)
-        else await featureApi.rejectFeature(entity.id)
-        break
-      case ITEM_TYPES.SUB_FEATURE:
-        if (action === 'approve') await subFeatureApi.approveSubFeature(entity.id)
-        else await subFeatureApi.rejectSubFeature(entity.id)
-        break
-      case ITEM_TYPES.STORY:
-        if (action === 'approve') await storyApi.approveStory(entity.id)
-        else await storyApi.rejectStory(entity.id)
-        break
-      case ITEM_TYPES.POINTS:
-        await storyApi.approvePoints(entity.id)
-        break
-      case ITEM_TYPES.TEST_CASE:
-        if (action === 'approve') await testCaseApi.approveTestCase(entity.id)
-        else await testCaseApi.rejectTestCase(entity.id)
-        break
-      default:
-        break
+    setReviewError(null)
+    if (action === 'approve' && item.type === ITEM_TYPES.FEATURE) {
+      const block = clarifyingApproveBlockMessage(entity)
+      if (block) {
+        setReviewError(block)
+        return
+      }
     }
-    await onRefresh?.()
+    try {
+      switch (item.type) {
+        case ITEM_TYPES.FEATURE:
+          if (action === 'approve') await featureApi.approveFeature(entity.id)
+          else await featureApi.rejectFeature(entity.id)
+          break
+        case ITEM_TYPES.SUB_FEATURE:
+          if (action === 'approve') await subFeatureApi.approveSubFeature(entity.id)
+          else await subFeatureApi.rejectSubFeature(entity.id)
+          break
+        case ITEM_TYPES.STORY:
+          if (action === 'approve') await storyApi.approveStory(entity.id)
+          else await storyApi.rejectStory(entity.id)
+          break
+        case ITEM_TYPES.POINTS:
+          await storyApi.approvePoints(entity.id)
+          break
+        case ITEM_TYPES.TEST_CASE:
+          if (action === 'approve') await testCaseApi.approveTestCase(entity.id)
+          else await testCaseApi.rejectTestCase(entity.id)
+          break
+        default:
+          break
+      }
+      await onRefresh?.()
+    } catch (err) {
+      setReviewError(err?.message || 'Review action failed')
+    }
+  }
+
+  async function handleReopen() {
+    setReviewError(null)
+    try {
+      switch (item.type) {
+        case ITEM_TYPES.FEATURE:
+          await featureApi.reopenFeature(entity.id)
+          break
+        case ITEM_TYPES.SUB_FEATURE:
+          await subFeatureApi.reopenSubFeature(entity.id)
+          break
+        case ITEM_TYPES.STORY:
+          await storyApi.reopenStory(entity.id)
+          break
+        case ITEM_TYPES.TEST_CASE:
+          await testCaseApi.reopenTestCase(entity.id)
+          break
+        default:
+          break
+      }
+      await onRefresh?.()
+    } catch (err) {
+      setReviewError(err?.message || 'Reopen failed')
+    }
   }
 
   async function handleSave(updateFn, payload) {
@@ -72,10 +114,25 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
     await onRefresh?.()
   }
 
+  function requestRunJob(label, run, { isRegenerate = false, childLabel = 'items' } = {}) {
+    if (!onRunJob) return
+    if (isRegenerate) {
+      setRegenConfirm({
+        title: 'Regenerate?',
+        message: regenerateConfirmMessage(childLabel),
+        label,
+        run,
+      })
+      return
+    }
+    onRunJob(label, run)
+  }
+
   const isPending =
     item.type === ITEM_TYPES.POINTS
       ? entity.points_status === 'pending_review'
       : entity.status === 'pending_review'
+  const isRejected = item.type !== ITEM_TYPES.POINTS && entity.status === 'rejected'
 
   const nextHint = getNextHint(item.type, entity)
   const nextAction = getNextAction(item.type, entity, childCount)
@@ -119,6 +176,16 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
           />
         </div>
       )}
+
+      {isRejected && (
+        <div className="detail-panel-toolbar">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleReopen} disabled={busy}>
+            Reopen for review
+          </button>
+        </div>
+      )}
+
+      {reviewError && <p className="form-error detail-panel-error">{reviewError}</p>}
 
       <div className="detail-panel-body">
         {item.type === ITEM_TYPES.FEATURE && (
@@ -199,13 +266,28 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => onRunJob(nextAction.label, nextAction.run)}
+              onClick={() =>
+                requestRunJob(nextAction.label, nextAction.run, {
+                  isRegenerate: nextAction.isRegenerate,
+                  childLabel: nextAction.childLabel,
+                })
+              }
               disabled={busy}
             >
               {nextAction.buttonLabel}
             </button>
           )}
         </div>
+      )}
+
+      {regenConfirm && (
+        <ConfirmModal
+          title={regenConfirm.title}
+          message={regenConfirm.message}
+          confirmLabel="Regenerate"
+          onConfirm={() => onRunJob?.(regenConfirm.label, regenConfirm.run)}
+          onClose={() => setRegenConfirm(null)}
+        />
       )}
 
       {editItem && item.type === ITEM_TYPES.FEATURE && (
@@ -276,6 +358,7 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
 function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRefresh, busy, onRunJob, onSelectSubFeature, onChildCountChange }) {
   const [subFeatures, setSubFeatures] = useState([])
   const [generating, setGenerating] = useState(false)
+  const [regenConfirm, setRegenConfirm] = useState(false)
 
   const load = useCallback(async () => {
     const res = await featureApi.listSubFeatures(feature.id)
@@ -287,16 +370,26 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
     load()
   }, [load])
 
-  async function handleGenerateSubFeatures() {
+  async function runGenerate() {
     if (!onRunJob) return
     setGenerating(true)
     try {
-      const label = subFeatures.length > 0 ? `Regenerate sub-features: ${feature.title}` : `Generate sub-features: ${feature.title}`
+      const isRegen = subFeatures.length > 0
+      const label = isRegen ? `Regenerate sub-features: ${feature.title}` : `Generate sub-features: ${feature.title}`
       await onRunJob(label, () => featureApi.generateSubFeatures(feature.id))
       await load()
     } finally {
       setGenerating(false)
     }
+  }
+
+  function handleGenerateSubFeatures() {
+    if (!onRunJob) return
+    if (subFeatures.length > 0) {
+      setRegenConfirm(true)
+      return
+    }
+    runGenerate()
   }
 
   const canGenerate = feature.status === 'approved' && onRunJob
@@ -355,6 +448,16 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
           </div>
         )}
       </section>
+
+      {regenConfirm && (
+        <ConfirmModal
+          title="Regenerate sub-features?"
+          message={regenerateConfirmMessage('sub-features')}
+          confirmLabel="Regenerate"
+          onConfirm={runGenerate}
+          onClose={() => setRegenConfirm(false)}
+        />
+      )}
     </>
   )
 }
@@ -362,6 +465,7 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
 function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale, busy, onRunJob, onSelectStory, onChildCountChange }) {
   const [stories, setStories] = useState([])
   const [generating, setGenerating] = useState(false)
+  const [regenConfirm, setRegenConfirm] = useState(false)
 
   const load = useCallback(async () => {
     const res = await subFeatureApi.listStories(subFeature.id)
@@ -373,16 +477,26 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
     load()
   }, [load])
 
-  async function handleGenerateStories() {
+  async function runGenerate() {
     if (!onRunJob) return
     setGenerating(true)
     try {
-      const label = stories.length > 0 ? `Regenerate stories: ${subFeature.title}` : `Generate stories: ${subFeature.title}`
+      const isRegen = stories.length > 0
+      const label = isRegen ? `Regenerate stories: ${subFeature.title}` : `Generate stories: ${subFeature.title}`
       await onRunJob(label, () => subFeatureApi.generateStories(subFeature.id))
       await load()
     } finally {
       setGenerating(false)
     }
+  }
+
+  function handleGenerateStories() {
+    if (!onRunJob) return
+    if (stories.length > 0) {
+      setRegenConfirm(true)
+      return
+    }
+    runGenerate()
   }
 
   const canGenerate = subFeature.status === 'approved' && onRunJob
@@ -448,6 +562,16 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
           </div>
         )}
       </section>
+
+      {regenConfirm && (
+        <ConfirmModal
+          title="Regenerate stories?"
+          message={regenerateConfirmMessage('stories')}
+          confirmLabel="Regenerate"
+          onConfirm={runGenerate}
+          onClose={() => setRegenConfirm(false)}
+        />
+      )}
     </>
   )
 }
@@ -500,6 +624,8 @@ function getNextAction(type, entity, childCount) {
         buttonLabel: hasChildren ? 'Regenerate sub-features' : 'Generate sub-features',
         label: `${hasChildren ? 'Regenerate' : 'Generate'} sub-features: ${entity.title}`,
         run: () => featureApi.generateSubFeatures(entity.id),
+        isRegenerate: hasChildren,
+        childLabel: 'sub-features',
       }
     case ITEM_TYPES.SUB_FEATURE:
       if (entity.status !== 'approved') return null
@@ -507,6 +633,8 @@ function getNextAction(type, entity, childCount) {
         buttonLabel: hasChildren ? 'Regenerate stories' : 'Generate stories',
         label: `${hasChildren ? 'Regenerate' : 'Generate'} stories: ${entity.title}`,
         run: () => subFeatureApi.generateStories(entity.id),
+        isRegenerate: hasChildren,
+        childLabel: 'stories',
       }
     default:
       return null

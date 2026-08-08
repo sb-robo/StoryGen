@@ -3,7 +3,15 @@ import { useJobs } from '../context/JobsContext'
 function JobStatusIcon({ status }) {
   if (status === 'running') return <span className="job-icon job-icon-running">●</span>
   if (status === 'succeeded') return <span className="job-icon job-icon-success">✓</span>
+  if (status === 'cancelled') return <span className="job-icon job-icon-cancelled">–</span>
   return <span className="job-icon job-icon-failed">✕</span>
+}
+
+function statusLabel(job) {
+  if (job.status === 'running') return 'Running…'
+  if (job.status === 'succeeded') return 'Completed'
+  if (job.status === 'cancelled') return 'Cancelled'
+  return job.error || 'Failed'
 }
 
 export function JobsButton() {
@@ -18,7 +26,7 @@ export function JobsButton() {
 }
 
 export function JobsDrawer() {
-  const { jobs, drawerOpen, setDrawerOpen, clearFinished } = useJobs()
+  const { jobs, drawerOpen, setDrawerOpen, clearFinished, cancelJob, retryJob } = useJobs()
 
   if (!drawerOpen) return null
 
@@ -50,11 +58,27 @@ export function JobsDrawer() {
                   <JobStatusIcon status={job.status} />
                   <div className="job-item-body">
                     <strong>{job.label}</strong>
-                    <span className="meta">
-                      {job.status === 'running' && 'Running…'}
-                      {job.status === 'succeeded' && 'Completed'}
-                      {job.status === 'failed' && (job.error || 'Failed')}
-                    </span>
+                    <span className="meta">{statusLabel(job)}</span>
+                    <div className="job-item-actions">
+                      {job.status === 'running' && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => cancelJob(job)}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {(job.status === 'failed' || job.status === 'cancelled') && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => retryJob(job)}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </li>
               ))}

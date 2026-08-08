@@ -263,3 +263,23 @@ class SubFeatureService:
             reviewed_by=item.reviewed_by,
             reviewed_at=item.reviewed_at,
         )
+
+    async def reopen_sub_feature(
+        self, user_id: int, sub_feature_id: int
+    ) -> SubFeatureReviewResponse:
+        item = await self._get_owned_sub_feature(user_id, sub_feature_id)
+        if item.status != ReviewStatus.REJECTED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only rejected sub-features can be reopened.",
+            )
+        item.status = ReviewStatus.PENDING_REVIEW.value
+        item.reviewed_by = None
+        item.reviewed_at = None
+        item = await self.repo.update(item)
+        return SubFeatureReviewResponse(
+            id=item.id,
+            status=item.status,
+            reviewed_by=item.reviewed_by,
+            reviewed_at=item.reviewed_at,
+        )

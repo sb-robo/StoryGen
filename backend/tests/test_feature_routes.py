@@ -149,6 +149,36 @@ def test_reject_feature(client, mock_feature_service):
     assert response.json()["status"] == "rejected"
 
 
+def test_reopen_feature(client, mock_feature_service):
+    mock_feature_service.reopen_feature = AsyncMock(
+        return_value=FeatureReviewResponse(
+            id=1,
+            status="pending_review",
+            reviewed_by=None,
+            reviewed_at=None,
+        )
+    )
+
+    response = client.post("/api/v1/features/1/reopen")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending_review"
+
+
+def test_approve_feature_propagates_clarifying_conflict(client, mock_feature_service):
+    mock_feature_service.approve_feature = AsyncMock(
+        side_effect=HTTPException(
+            status_code=409,
+            detail="Answer clarifying questions before approving (2 unanswered).",
+        )
+    )
+
+    response = client.post("/api/v1/features/1/approve")
+
+    assert response.status_code == 409
+    assert "clarifying" in response.json()["detail"].lower()
+
+
 def test_update_feature(client, mock_feature_service):
     mock_feature_service.update_feature = AsyncMock(
         return_value=_make_feature_response(title="Updated Login")

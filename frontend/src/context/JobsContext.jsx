@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useState } from 'react'
 import { api } from '../api/client'
 import { resolveUrl } from '../api/config'
+import * as operationsApi from '../api/operations'
 import { watchOperation } from '../hooks/useOperationPoll'
 
 const JobsContext = createContext(null)
@@ -54,12 +55,24 @@ export function JobsProvider({ children }) {
       try {
         const finalStatus = await watchOperation(op.operation_id, op.status_url, {
           onUpdate: (status) => {
+            let mapped = 'running'
+            if (status.done) {
+              if (status.status === 'failed') mapped = 'failed'
+              else if (status.status === 'cancelled') mapped = 'cancelled'
+              else mapped = 'succeeded'
+            }
             updateJob(jobId, {
-              status: status.done ? (status.status === 'failed' ? 'failed' : 'succeeded') : 'running',
+              status: mapped,
               error: status.error_message ?? null,
             })
           },
         })
+
+        if (finalStatus.status === 'cancelled') {
+          updateJob(jobId, { status: 'cancelled', error: null })
+          addToast({ type: 'info', message: `${label || 'Job'} cancelled` })
+          return null
+        }
 
         updateJob(jobId, { status: 'succeeded', error: null })
         addToast({ type: 'success', message: `${label || 'Job'} completed` })
@@ -80,6 +93,38 @@ export function JobsProvider({ children }) {
     [addToast, updateJob],
   )
 
+  const cancelJob = useCallback(
+    async (job) => {
+      if (!job?.operationId) return
+      try {
+        await operationsApi.cancelOperation(job.operationId)
+        // Status toast comes from the in-flight watchOperation when it sees cancelled.
+        updateJob(job.id, { status: 'cancelled', error: null })
+      } catch (err) {
+        addToast({ type: 'error', message: err.message || 'Cancel failed' })
+      }
+    },
+    [addToast, updateJob],
+  )
+
+  const retryJob = useCallback(
+    async (job, { onComplete } = {}) => {
+      if (!job?.operationId) return
+      try {
+        const op = await operationsApi.retryOperation(job.operationId)
+        return await trackJob(op, {
+          label: `Retry: ${job.label || 'Job'}`,
+          brdId: job.brdId,
+          onComplete,
+        })
+      } catch (err) {
+        addToast({ type: 'error', message: err.message || 'Retry failed' })
+        throw err
+      }
+    },
+    [addToast, trackJob],
+  )
+
   const clearFinished = useCallback(() => {
     setJobs((prev) => prev.filter((j) => j.status === 'running'))
   }, [])
@@ -94,6 +139,8 @@ export function JobsProvider({ children }) {
         drawerOpen,
         setDrawerOpen,
         trackJob,
+        cancelJob,
+        retryJob,
         clearFinished,
         toasts,
         dismissToast,

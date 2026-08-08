@@ -2,7 +2,7 @@ import * as featureApi from '../api/features'
 import * as storyApi from '../api/stories'
 import * as subFeatureApi from '../api/subFeatures'
 import * as testCaseApi from '../api/testCases'
-import { ITEM_TYPES } from './pipeline'
+import { clarifyingApproveBlockMessage, ITEM_TYPES } from './pipeline'
 
 /** Stable identity for a review-queue / selection item across types. */
 export function queueItemKey(item) {
@@ -19,7 +19,17 @@ export function filterReviewQueue(items, typeFilter = 'all', parentFilter = 'all
   return result
 }
 
+export function approveBlockReason(item) {
+  if (item?.type === ITEM_TYPES.FEATURE) {
+    return clarifyingApproveBlockMessage(item.entity)
+  }
+  return null
+}
+
 export async function approveQueueItem(item) {
+  const block = approveBlockReason(item)
+  if (block) throw new Error(block)
+
   const entity = item.entity
   switch (item.type) {
     case ITEM_TYPES.FEATURE:

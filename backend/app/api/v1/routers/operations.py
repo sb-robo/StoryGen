@@ -2,24 +2,44 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.core.dependencies import get_current_admin, get_current_user, get_operation_service
+from app.db.models.async_operation import OperationType
 from app.db.models.user import User
 from app.db.session import async_session_local
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.operation_schema import (
     OperationListResponse,
+    OperationResponse,
     OperationSortBy,
     OperationSortOrder,
     OperationStatusValue,
     OperationTypeValue,
 )
+from app.services.ai.tasks import (
+    run_feature_extraction_task,
+    run_story_generation_task,
+    run_story_point_estimation_task,
+    run_sub_feature_generation_task,
+    run_test_case_generation_task,
+)
+from app.services.brd.tasks import run_brd_parse_task
 from app.services.operations import OperationService
 from app.utils.operation_urls import operation_result_url, operation_status_url
 
 router = APIRouter()
+
+_RETRY_TASKS = {
+    OperationType.BRD_UPLOAD.value: run_brd_parse_task,
+    OperationType.BRD_REPARSE.value: run_brd_parse_task,
+    OperationType.FEATURE_EXTRACTION.value: run_feature_extraction_task,
+    OperationType.SUB_FEATURE_GENERATION.value: run_sub_feature_generation_task,
+    OperationType.STORY_GENERATION.value: run_story_generation_task,
+    OperationType.STORY_POINT_ESTIMATION.value: run_story_point_estimation_task,
+    OperationType.TEST_CASE_GENERATION.value: run_test_case_generation_task,
+}
 
 
 @router.get(
@@ -97,6 +117,44 @@ def _sse_pack(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
 
+@router.post(
+    "/{operation_id}/cancel",
+    response_model=OperationResponse,
+    summary="Cancel a pending or running operation",
+    description=(
+        "Marks the operation cancelled. In-flight LLM work may still finish, "
+        "but the operation will not be marked succeeded afterward."
+    ),
+)
+async def cancel_operation(
+    operation_id: str,
+    current_user: User = Depends(get_current_user),
+    operation_service: OperationService = Depends(get_operation_service),
+) -> OperationResponse:
+    return await operation_service.cancel_operation(current_user.id, operation_id)
+
+
+@router.post(
+    "/{operation_id}/retry",
+    response_model=OperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Retry a failed or cancelled operation",
+    description="Creates a new async operation for the same type and resource.",
+)
+async def retry_operation(
+    operation_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    operation_service: OperationService = Depends(get_operation_service),
+) -> OperationResponse:
+    new_op = await operation_service.retry_operation(current_user.id, operation_id)
+    task = _RETRY_TASKS.get(new_op.operation_type)
+    if task is None:
+        return new_op
+    background_tasks.add_task(task, new_op.operation_id)
+    return new_op
+
+
 @router.get(
     "/stream",
     summary="Stream operation status updates (SSE)",
@@ -130,7 +188,7 @@ async def stream_operations(
             "resource_id": op.resource_id,
             "error_message": op.error_message,
             "updated_at": op.updated_at,
-            "done": op.status in {"succeeded", "failed"},
+            "done": op.status in {"succeeded", "failed", "cancelled"},
             "status_url": operation_status_url(op.id, op.operation_type),
             "result_url": operation_result_url(op.id, op.operation_type),
         }

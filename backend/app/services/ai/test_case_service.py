@@ -275,3 +275,28 @@ class TestCaseService:
             reviewed_by=item.reviewed_by,
             reviewed_at=item.reviewed_at,
         )
+
+    async def reopen_test_case(
+        self, user_id: int, test_case_id: int
+    ) -> TestCaseReviewResponse:
+        item = await self.repo.get_by_id_for_user(test_case_id, user_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Test case not found",
+            )
+        if item.status != TestCaseStatus.REJECTED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only rejected test cases can be reopened.",
+            )
+        item.status = TestCaseStatus.PENDING_REVIEW.value
+        item.reviewed_by = None
+        item.reviewed_at = None
+        item = await self.repo.update(item)
+        return TestCaseReviewResponse(
+            id=item.id,
+            status=item.status,
+            reviewed_by=item.reviewed_by,
+            reviewed_at=item.reviewed_at,
+        )

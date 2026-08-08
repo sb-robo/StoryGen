@@ -20,6 +20,10 @@ export function rejectFeature(id) {
   return api.post(`/features/${id}/reject`)
 }
 
+export function reopenFeature(id) {
+  return api.post(`/features/${id}/reopen`)
+}
+
 export function generateSubFeatures(featureId) {
   return api.post(`/features/${featureId}/sub-features/generate`)
 }

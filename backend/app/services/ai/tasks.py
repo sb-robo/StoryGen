@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_factory) -> None:
+    from app.db.models.async_operation import OperationStatus
+
     async with async_session_local() as session:
         op_repo = OperationRepository(session)
         try:
@@ -19,13 +21,27 @@ async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_fact
             if not operation:
                 logger.error("Operation not found: %s", operation_id)
                 return
+            if operation.status == OperationStatus.CANCELLED.value:
+                logger.info("Skipping cancelled operation: %s", operation_id)
+                return
 
             await op_repo.mark_running(operation)
             await session.commit()
 
+            operation = await op_repo.get_by_id(operation_id)
+            if not operation or operation.status == OperationStatus.CANCELLED.value:
+                logger.info("Operation cancelled before work started: %s", operation_id)
+                return
+
             service = service_factory(session)
             complete_fn = getattr(service, complete_fn_name)
             result = await complete_fn(operation_id)
+
+            operation = await op_repo.get_by_id(operation_id)
+            if not operation or operation.status == OperationStatus.CANCELLED.value:
+                logger.info("Operation cancelled during work: %s", operation_id)
+                return
+
             if result is None:
                 await op_repo.mark_failed(
                     operation, f"Resource not found for {complete_fn_name}"
@@ -43,7 +59,7 @@ async def _run_ai_task(operation_id: str, *, complete_fn_name: str, service_fact
             )
             try:
                 operation = await op_repo.get_by_id(operation_id)
-                if operation:
+                if operation and operation.status != OperationStatus.CANCELLED.value:
                     await op_repo.mark_failed(operation, str(exc))
                     await session.commit()
             except Exception:

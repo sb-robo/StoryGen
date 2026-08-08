@@ -273,3 +273,21 @@ class StoryService:
             reviewed_by=item.reviewed_by,
             reviewed_at=item.reviewed_at,
         )
+
+    async def reopen_story(self, user_id: int, story_id: int) -> StoryReviewResponse:
+        item = await self._get_owned_story(user_id, story_id)
+        if item.status != StoryReviewStatus.REJECTED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only rejected stories can be reopened.",
+            )
+        item.status = StoryReviewStatus.PENDING_REVIEW.value
+        item.reviewed_by = None
+        item.reviewed_at = None
+        item = await self.repo.update(item)
+        return StoryReviewResponse(
+            id=item.id,
+            status=item.status,
+            reviewed_by=item.reviewed_by,
+            reviewed_at=item.reviewed_at,
+        )

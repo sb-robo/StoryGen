@@ -77,5 +77,5 @@ class TestCaseUpdateRequest(BaseModel):
 class TestCaseReviewResponse(BaseModel):
     id: int
     status: str
-    reviewed_by: int
-    reviewed_at: datetime
+    reviewed_by: int | None = None
+    reviewed_at: datetime | None = None

@@ -12,6 +12,7 @@ class OperationStatusValue(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class OperationTypeValue(StrEnum):
@@ -58,6 +59,7 @@ class OperationResponse(BaseModel):
         return self.status in {
             OperationStatusValue.SUCCEEDED.value,
             OperationStatusValue.FAILED.value,
+            OperationStatusValue.CANCELLED.value,
         }
 
     @computed_field

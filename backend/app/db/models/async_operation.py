@@ -13,6 +13,7 @@ class OperationStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class OperationType(StrEnum):

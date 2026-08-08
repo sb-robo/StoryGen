@@ -310,6 +310,17 @@ class FeatureService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only pending_review features can be approved.",
             )
+        questions = decode_clarifying_questions(feature.clarifying_questions)
+        answers = decode_clarifying_answers(feature.clarifying_answers)
+        unanswered = max(0, len(questions) - len(answers))
+        if unanswered > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Answer clarifying questions before approving "
+                    f"({unanswered} unanswered)."
+                ),
+            )
         feature.status = FeatureStatus.APPROVED.value
         feature.reviewed_by = user_id
         feature.reviewed_at = datetime.now(timezone.utc)
@@ -333,6 +344,26 @@ class FeatureService:
         feature.status = FeatureStatus.REJECTED.value
         feature.reviewed_by = user_id
         feature.reviewed_at = datetime.now(timezone.utc)
+        feature = await self.repo.update(feature)
+        return FeatureReviewResponse(
+            id=feature.id,
+            status=feature.status,
+            reviewed_by=feature.reviewed_by,
+            reviewed_at=feature.reviewed_at,
+        )
+
+    async def reopen_feature(
+        self, user_id: int, feature_id: int
+    ) -> FeatureReviewResponse:
+        feature = await self._get_owned_feature(user_id, feature_id)
+        if feature.status != FeatureStatus.REJECTED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only rejected features can be reopened.",
+            )
+        feature.status = FeatureStatus.PENDING_REVIEW.value
+        feature.reviewed_by = None
+        feature.reviewed_at = None
         feature = await self.repo.update(feature)
         return FeatureReviewResponse(
             id=feature.id,
