@@ -24,6 +24,10 @@ export function getPipelineSummary(brdId) {
   return api.get(`/brds/${brdId}/pipeline-summary`)
 }
 
+export function getLlmUsage(brdId) {
+  return api.get(`/brds/${brdId}/llm-usage`)
+}
+
 export function uploadBrd(name, file, pipelineSettings = null) {
   const form = new FormData()
   form.append('name', name)

@@ -30,6 +30,7 @@ async def fetch_brd_chunk_context(
     """
     query = build_retrieval_query(*query_parts)
     if not query:
+        logger.debug("BRD chunk retrieval skipped for brd_id=%s: empty query", brd_id)
         return ""
 
     try:
@@ -47,5 +48,9 @@ async def fetch_brd_chunk_context(
         return ""
 
     if not chunks:
+        logger.debug("BRD chunk retrieval returned no matches for brd_id=%s", brd_id)
         return ""
+    logger.info(
+        "BRD chunk retrieval returned %s chunk(s) for brd_id=%s", len(chunks), brd_id
+    )
     return format_similar_chunks(chunks)

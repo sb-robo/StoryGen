@@ -7,6 +7,10 @@ class ExtractedSubFeatureItem(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str = Field(description="Why this sub-feature is distinct")
     source_excerpt: str | None = Field(default=None)
+    source_section_path: str | None = Field(
+        default=None,
+        description="Matching BRD [Section Path] when available",
+    )
 
 
 class SubFeatureGenerationOutput(BaseModel):

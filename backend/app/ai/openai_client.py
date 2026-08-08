@@ -66,18 +66,54 @@ class OpenAIClient:
         prompt_hash = hashlib.sha256(
             "|".join(f"{m['role']}:{m['content']}" for m in messages).encode()
         ).hexdigest()
+        prompt_chars = sum(len(m["content"]) for m in messages)
+
+        logger.info(
+            "LLM call starting: node=%s iteration=%s model=%s operation_id=%s brd_id=%s "
+            "prompt_chars=%s",
+            node_name,
+            iteration,
+            self.model,
+            operation_id,
+            brd_id,
+            prompt_chars,
+        )
 
         started = time.perf_counter()
-        response = await self._client.beta.chat.completions.parse(
-            model=self.model,
-            messages=messages,
-            response_format=response_model,
-        )
+        try:
+            response = await self._client.beta.chat.completions.parse(
+                model=self.model,
+                messages=messages,
+                response_format=response_model,
+            )
+        except Exception:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            logger.exception(
+                "LLM call failed: node=%s iteration=%s model=%s operation_id=%s "
+                "after %sms",
+                node_name,
+                iteration,
+                self.model,
+                operation_id,
+                latency_ms,
+            )
+            raise
         latency_ms = int((time.perf_counter() - started) * 1000)
 
         usage = response.usage
         tokens_in = usage.prompt_tokens if usage else 0
         tokens_out = usage.completion_tokens if usage else 0
+
+        logger.info(
+            "LLM call finished: node=%s iteration=%s latency_ms=%s tokens_in=%s "
+            "tokens_out=%s operation_id=%s",
+            node_name,
+            iteration,
+            latency_ms,
+            tokens_in,
+            tokens_out,
+            operation_id,
+        )
 
         if self.log_repo is not None and user_id is not None:
             await self.log_repo.create(
@@ -97,6 +133,16 @@ class OpenAIClient:
 
         parsed = response.choices[0].message.parsed
         if parsed is None:
+            logger.error(
+                "LLM call returned no parsed output: node=%s operation_id=%s "
+                "finish_reason=%s refusal=%s",
+                node_name,
+                operation_id,
+                response.choices[0].finish_reason if response.choices else None,
+                getattr(response.choices[0].message, "refusal", None)
+                if response.choices
+                else None,
+            )
             raise RuntimeError(f"OpenAI returned no parsed output for node {node_name}")
         return parsed
 

@@ -38,6 +38,9 @@ class BrdStory(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
     source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_chunk_id: Mapped[int | None] = mapped_column(
+        ForeignKey("brd_chunks.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=StoryReviewStatus.PENDING_REVIEW.value
     )

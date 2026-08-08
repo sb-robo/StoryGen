@@ -45,6 +45,7 @@ from app.schemas.chunk_strategy_schema import ChunkStrategyListResponse, build_c
 from app.schemas.pipeline_settings_schema import BrdPipelineSettings
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.feature_schema import FeatureListResponse, FeatureStatusFilter
+from app.schemas.llm_usage_schema import LlmUsageSummaryResponse
 from app.schemas.pipeline_schema import PipelineSummaryResponse
 from app.services.ai import FeatureService
 from app.services.ai.batch_service import BatchService
@@ -401,6 +402,20 @@ async def get_pipeline_summary(
     pipeline_service: PipelineService = Depends(get_pipeline_service),
 ) -> PipelineSummaryResponse:
     return await pipeline_service.get_summary(current_user.id, brd_id)
+
+
+@router.get(
+    "/{brd_id}/llm-usage",
+    response_model=LlmUsageSummaryResponse,
+    summary="LLM token/latency usage for a BRD",
+    description="Aggregated llm_call_logs for this BRD (owner-scoped).",
+)
+async def get_brd_llm_usage(
+    brd_id: int,
+    current_user: User = Depends(get_current_user),
+    brd_service: BrdService = Depends(get_brd_service),
+) -> LlmUsageSummaryResponse:
+    return await brd_service.get_llm_usage(current_user.id, brd_id)
 
 
 @router.post(

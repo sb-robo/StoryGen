@@ -122,6 +122,23 @@ async def reopen_feature(
 
 
 @router.post(
+    "/{feature_id}/refine-from-answers",
+    response_model=FeatureResponse,
+    summary="Revise a feature using clarifying answers",
+    description=(
+        "Runs a sync LLM pass that rewrites the feature from saved clarifying Q&A. "
+        "Approved features return to pending_review after refine."
+    ),
+)
+async def refine_feature_from_answers(
+    feature_id: int,
+    current_user: User = Depends(get_current_user),
+    feature_service: FeatureService = Depends(get_feature_service),
+) -> FeatureResponse:
+    return await feature_service.refine_from_answers(current_user.id, feature_id)
+
+
+@router.post(
     "/{feature_id}/sub-features/generate",
     response_model=OperationResponse,
     status_code=status.HTTP_202_ACCEPTED,

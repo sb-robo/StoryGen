@@ -9,6 +9,7 @@ from app.core.dependencies import get_current_admin, get_current_user, get_opera
 from app.db.models.async_operation import OperationType
 from app.db.models.user import User
 from app.db.session import async_session_local
+from app.repositories.llm_call_log_repository import LlmCallLogRepository
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.operation_schema import (
     OperationListResponse,
@@ -27,6 +28,7 @@ from app.services.ai.tasks import (
 )
 from app.services.brd.tasks import run_brd_parse_task
 from app.services.operations import OperationService
+from app.utils.operation_progress import format_operation_progress
 from app.utils.operation_urls import operation_result_url, operation_status_url
 
 router = APIRouter()
@@ -179,7 +181,10 @@ async def stream_operations(
         parsed_ids = [part.strip() for part in operation_ids.split(",") if part.strip()]
     user_id = current_user.id
 
-    def _payload(op) -> dict:
+    async def _payload(session, op) -> dict:
+        latest = None
+        if op.status == "running":
+            latest = await LlmCallLogRepository(session).latest_for_operation(op.id)
         return {
             "operation_id": op.id,
             "operation_type": op.operation_type,
@@ -187,7 +192,8 @@ async def stream_operations(
             "resource_type": op.resource_type,
             "resource_id": op.resource_id,
             "error_message": op.error_message,
-            "updated_at": op.updated_at,
+            "progress": format_operation_progress(status=op.status, latest_log=latest),
+            "updated_at": op.updated_at.isoformat() if op.updated_at else None,
             "done": op.status in {"succeeded", "failed", "cancelled"},
             "status_url": operation_status_url(op.id, op.operation_type),
             "result_url": operation_result_url(op.id, op.operation_type),
@@ -195,6 +201,7 @@ async def stream_operations(
 
     async def event_generator():
         cursor = datetime.now(timezone.utc)
+        last_progress: dict[str, str | None] = {}
         async with async_session_local() as session:
             repo = OperationRepository(session)
             snapshot = await repo.list_for_user(
@@ -208,7 +215,9 @@ async def stream_operations(
                 id_set = set(parsed_ids)
                 snapshot = [op for op in snapshot if op.id in id_set]
             for op in snapshot:
-                yield _sse_pack("operation", _payload(op))
+                payload = await _payload(session, op)
+                last_progress[op.id] = payload.get("progress")
+                yield _sse_pack("operation", payload)
                 if op.updated_at and op.updated_at > cursor:
                     cursor = op.updated_at
 
@@ -226,17 +235,63 @@ async def stream_operations(
                     operation_ids=parsed_ids,
                     limit=50,
                 )
-            if updated:
-                idle_ticks = 0
-                for op in updated:
-                    yield _sse_pack("operation", _payload(op))
+                # Also refresh watched running ops so progress steps stream
+                # even when async_operations.updated_at is unchanged between LLM calls.
+                watched_running = []
+                if parsed_ids:
+                    for op_id in parsed_ids:
+                        op = await repo.get_by_id_for_user(op_id, user_id)
+                        if op and op.status == "running":
+                            watched_running.append(op)
+
+                updated_ids = {op.id for op in updated}
+                emit_ops = {op.id: op for op in updated}
+                for op in watched_running:
+                    emit_ops[op.id] = op
+
+                emitted = False
+                for op in emit_ops.values():
+                    payload = await _payload(session, op)
+                    progress = payload.get("progress")
+                    status_changed = op.id in updated_ids
+                    progress_changed = last_progress.get(op.id) != progress
+                    if status_changed or progress_changed or op.id not in last_progress:
+                        emitted = True
+                        last_progress[op.id] = progress
+                        yield _sse_pack("operation", payload)
                     if op.updated_at and op.updated_at > cursor:
                         cursor = op.updated_at
+
+            if emitted:
+                idle_ticks = 0
             else:
                 idle_ticks += 1
                 yield ": keepalive\n\n"
                 if idle_ticks >= 150:  # ~5 minutes at 2s
                     yield _sse_pack("timeout", {"message": "stream idle timeout"})
+                    break
+
+            # Close the connection promptly once every operation this stream is
+            # watching has reached a terminal state, instead of idling on 2s
+            # polling for up to 5 minutes after the client has what it needs.
+            # This matters most when many generate/regenerate jobs run
+            # concurrently: without this, each finished job's stream kept
+            # polling the DB every 2s for minutes, adding needless load that
+            # could delay progress updates for still-running jobs.
+            if parsed_ids:
+                all_terminal = True
+                async with async_session_local() as session:
+                    repo = OperationRepository(session)
+                    for op_id in parsed_ids:
+                        op = await repo.get_by_id_for_user(op_id, user_id)
+                        if op is None or op.status not in {
+                            "succeeded",
+                            "failed",
+                            "cancelled",
+                        }:
+                            all_terminal = False
+                            break
+                if all_terminal:
                     break
             await asyncio.sleep(2)
 

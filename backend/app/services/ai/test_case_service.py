@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.agents.test_case_generation import generate_test_cases_for_story
+from app.ai.feature_extraction.chunk_link import resolve_source_chunk_id
 from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
@@ -58,6 +59,7 @@ class TestCaseService:
             confidence=item.confidence,
             rationale=item.rationale,
             source_excerpt=item.source_excerpt,
+            source_chunk_id=item.source_chunk_id,
             status=item.status,
             reviewed_by=item.reviewed_by,
             reviewed_at=item.reviewed_at,
@@ -157,6 +159,7 @@ class TestCaseService:
         )
 
         await self.repo.delete_non_finalized_for_story(story.id)
+        chunks = await self.chunk_repo.list_for_brd(brd_id)
 
         items: list[BrdTestCase] = []
         for idx, item in enumerate(output.test_cases):
@@ -171,6 +174,12 @@ class TestCaseService:
                     test_type=item.test_type,
                     confidence=item.confidence,
                     rationale=item.rationale.strip(),
+                    source_excerpt=item.source_excerpt,
+                    source_chunk_id=resolve_source_chunk_id(
+                        chunks,
+                        section_path=item.source_section_path,
+                        source_excerpt=item.source_excerpt,
+                    ),
                     status=TestCaseStatus.PENDING_REVIEW.value,
                     sort_order=idx,
                 )

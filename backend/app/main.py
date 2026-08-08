@@ -1,3 +1,4 @@
+import logging
 from logging import getLogger
 
 from fastapi import FastAPI
@@ -5,9 +6,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.v1 import api
 from app.core.config import apply_huggingface_token, apply_openai_settings, settings
-from app.db.session import async_session_local
+
+# Configure the root logger before importing routers/services so that every
+# `logging.getLogger(__name__)` call in the app (node execution, LLM calls,
+# background tasks, RAG retrieval, etc.) actually produces output.
+# Uvicorn only configures its own "uvicorn"/"uvicorn.access" loggers by
+# default; without this, app-level logger.info()/logger.debug() calls are
+# silently dropped and only uvicorn's request access logs are visible.
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    if not settings.DEBUG
+    else logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+# Quiet noisy third-party libraries unless we explicitly want DEBUG everywhere.
+if not settings.DEBUG:
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+
+from app.api.v1 import api  # noqa: E402 (import after logging setup)
+from app.db.session import async_session_local  # noqa: E402
 
 logger = getLogger(__name__)
 ROUTE_PREFIX = "/api/v1"

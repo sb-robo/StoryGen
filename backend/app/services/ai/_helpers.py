@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from app.db.models.async_operation import AsyncOperation, OperationStatus
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.operation_schema import OperationResponse
+from app.utils.operation_progress import format_operation_progress
 
 
 def operation_response(operation: AsyncOperation) -> OperationResponse:
@@ -15,6 +16,7 @@ def operation_response(operation: AsyncOperation) -> OperationResponse:
         resource_type=operation.resource_type,
         resource_id=operation.resource_id,
         error_message=operation.error_message,
+        progress=format_operation_progress(status=operation.status, latest_log=None),
         created_at=operation.created_at,
         updated_at=operation.updated_at,
         completed_at=operation.completed_at,

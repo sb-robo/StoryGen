@@ -47,6 +47,10 @@ class OperationResponse(BaseModel):
     resource_type: str | None = None
     resource_id: int | None = Field(default=None, description="BRD id once the upload row exists")
     error_message: str | None = None
+    progress: str | None = Field(
+        default=None,
+        description="Human-readable current step while running (from latest LLM node)",
+    )
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None

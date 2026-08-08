@@ -24,6 +24,10 @@ export function reopenFeature(id) {
   return api.post(`/features/${id}/reopen`)
 }
 
+export function refineFeatureFromAnswers(id) {
+  return api.post(`/features/${id}/refine-from-answers`)
+}
+
 export function generateSubFeatures(featureId) {
   return api.post(`/features/${featureId}/sub-features/generate`)
 }

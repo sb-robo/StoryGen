@@ -1,0 +1,22 @@
+{
+  "brd_name": "Payments Portal BRD",
+  "min_features": 3,
+  "max_features": 12,
+  "required_themes": [
+    "auth",
+    "payment",
+    "report"
+  ],
+  "forbidden_title_substrings": [
+    "as a ",
+    "i want",
+    "todo",
+    "spike"
+  ],
+  "rules": {
+    "require_description_min_chars": 40,
+    "require_rationale": true,
+    "prefer_source_excerpt": true,
+    "max_clarifying_questions_when_high_confidence": 0
+  }
+}

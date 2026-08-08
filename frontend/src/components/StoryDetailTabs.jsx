@@ -17,8 +17,11 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
   const [testCases, setTestCases] = useState([])
   const [editPoints, setEditPoints] = useState(false)
   const [editTestCase, setEditTestCase] = useState(null)
-  const [localBusy, setLocalBusy] = useState(false)
-  const { trackJob } = useJobs()
+  const [enqueueing, setEnqueueing] = useState(false)
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const { trackJob, isJobRunningFor } = useJobs()
+  const pointsJobRunning = isJobRunningFor('story', story.id, 'story_point_estimation')
+  const testsJobRunning = isJobRunningFor('story', story.id, 'test_case_generation')
 
   const loadTestCases = useCallback(async () => {
     const res = await storyApi.listTestCases(story.id)
@@ -33,31 +36,43 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
     setTab(initialTab)
   }, [story.id, initialTab])
 
+  useEffect(() => {
+    if (!testsJobRunning) {
+      void loadTestCases()
+    }
+  }, [testsJobRunning, loadTestCases])
+
   async function runJob(label, fn) {
-    setLocalBusy(true)
+    setEnqueueing(true)
     try {
       const op = await fn()
-      await trackJob(op, { label, onComplete: () => onRefresh?.() })
-      await loadTestCases()
-      await onRefresh?.()
+      void trackJob(op, {
+        label,
+        onComplete: () => {
+          void loadTestCases()
+          void onRefresh?.()
+        },
+      }).catch(() => {})
     } finally {
-      setLocalBusy(false)
+      setEnqueueing(false)
     }
   }
 
   async function handleReviewTestCase(id, action) {
-    setLocalBusy(true)
+    setReviewBusy(true)
     try {
       if (action === 'approve') await testCaseApi.approveTestCase(id)
       else await testCaseApi.rejectTestCase(id)
       await loadTestCases()
       await onRefresh?.()
     } finally {
-      setLocalBusy(false)
+      setReviewBusy(false)
     }
   }
 
-  const isBusy = busy || localBusy
+  const formBusy = busy || enqueueing || reviewBusy
+  const pointsBusy = formBusy || pointsJobRunning
+  const testsBusy = formBusy || testsJobRunning
 
   return (
     <div className="story-tabs">
@@ -114,11 +129,11 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={() => runJob('Estimate story points', () => storyApi.estimatePoints(story.id))}
-                disabled={isBusy}
+                disabled={pointsBusy}
               >
-                Estimate points
+                {pointsJobRunning ? 'Estimating…' : 'Estimate points'}
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditPoints(true)} disabled={isBusy}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditPoints(true)} disabled={formBusy}>
                 Override
               </button>
               {story.story_points && story.points_status === 'pending_review' && (
@@ -126,15 +141,15 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
                   type="button"
                   className="btn btn-success btn-sm"
                   onClick={async () => {
-                    setLocalBusy(true)
+                    setReviewBusy(true)
                     try {
                       await storyApi.approvePoints(story.id)
                       await onRefresh?.()
                     } finally {
-                      setLocalBusy(false)
+                      setReviewBusy(false)
                     }
                   }}
-                  disabled={isBusy}
+                  disabled={formBusy}
                 >
                   Approve points
                 </button>
@@ -152,9 +167,9 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={() => runJob('Generate test cases', () => storyApi.generateTestCases(story.id))}
-                disabled={isBusy}
+                disabled={testsBusy}
               >
-                Generate test cases
+                {testsJobRunning ? 'Generating…' : 'Generate test cases'}
               </button>
             </div>
           )}
@@ -178,7 +193,7 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
                         onApprove={() => handleReviewTestCase(tc.id, 'approve')}
                         onReject={() => handleReviewTestCase(tc.id, 'reject')}
                         onEdit={() => setEditTestCase(tc)}
-                        disabled={isBusy}
+                        disabled={formBusy}
                       />
                     )}
                   </div>

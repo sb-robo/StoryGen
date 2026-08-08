@@ -3,6 +3,7 @@ import * as featureApi from '../api/features'
 import * as subFeatureApi from '../api/subFeatures'
 import * as storyApi from '../api/stories'
 import * as testCaseApi from '../api/testCases'
+import { useJobs } from '../context/JobsContext'
 import { clarifyingApproveBlockMessage, ITEM_TYPES, regenerateConfirmMessage } from '../utils/pipeline'
 import { buildAncestorPath, nodeToItem } from '../utils/lineage'
 import { Breadcrumb } from './Breadcrumb'
@@ -388,8 +389,10 @@ export function DetailPanel({
 
 function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRefresh, busy, onRunJob, onSelectSubFeature, onChildCountChange }) {
   const [subFeatures, setSubFeatures] = useState([])
-  const [generating, setGenerating] = useState(false)
+  const [enqueueing, setEnqueueing] = useState(false)
   const [regenConfirm, setRegenConfirm] = useState(false)
+  const { isJobRunningFor } = useJobs()
+  const jobRunning = isJobRunningFor('feature', feature.id, 'sub_feature_generation')
 
   const load = useCallback(async () => {
     const res = await featureApi.listSubFeatures(feature.id)
@@ -401,16 +404,22 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
     load()
   }, [load])
 
+  // Refresh children when this feature's generation job finishes
+  useEffect(() => {
+    if (!jobRunning) {
+      void load()
+    }
+  }, [jobRunning, load])
+
   async function runGenerate() {
     if (!onRunJob) return
-    setGenerating(true)
+    setEnqueueing(true)
     try {
       const isRegen = subFeatures.length > 0
       const label = isRegen ? `Regenerate sub-features: ${feature.title}` : `Generate sub-features: ${feature.title}`
       await onRunJob(label, () => featureApi.generateSubFeatures(feature.id))
-      await load()
     } finally {
-      setGenerating(false)
+      setEnqueueing(false)
     }
   }
 
@@ -424,7 +433,7 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
   }
 
   const canGenerate = feature.status === 'approved' && onRunJob
-  const isBusy = busy || generating
+  const isBusy = busy || enqueueing || jobRunning
 
   return (
     <>
@@ -449,10 +458,15 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
         </section>
       )}
 
-      {feature.source_excerpt && (
+      {(feature.source_excerpt || feature.source_chunk_id) && (
         <section className="detail-block">
-          <h4>Source excerpt</h4>
-          <p className="source-excerpt">{feature.source_excerpt}</p>
+          <h4>Source grounding</h4>
+          {feature.source_excerpt && (
+            <p className="source-excerpt">{feature.source_excerpt}</p>
+          )}
+          {feature.source_chunk_id != null && (
+            <p className="meta">Linked BRD chunk #{feature.source_chunk_id}</p>
+          )}
         </section>
       )}
 
@@ -461,7 +475,11 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
           <h4>Sub-features {subFeatures.length > 0 ? `(${subFeatures.length})` : ''}</h4>
           {canGenerate && (
             <button type="button" className="btn btn-primary btn-sm" onClick={handleGenerateSubFeatures} disabled={isBusy}>
-              {subFeatures.length > 0 ? 'Regenerate sub-features' : 'Generate sub-features'}
+              {jobRunning
+                ? 'Generating…'
+                : subFeatures.length > 0
+                  ? 'Regenerate sub-features'
+                  : 'Generate sub-features'}
             </button>
           )}
         </div>
@@ -495,8 +513,10 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
 
 function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale, busy, onRunJob, onSelectStory, onChildCountChange }) {
   const [stories, setStories] = useState([])
-  const [generating, setGenerating] = useState(false)
+  const [enqueueing, setEnqueueing] = useState(false)
   const [regenConfirm, setRegenConfirm] = useState(false)
+  const { isJobRunningFor } = useJobs()
+  const jobRunning = isJobRunningFor('sub_feature', subFeature.id, 'story_generation')
 
   const load = useCallback(async () => {
     const res = await subFeatureApi.listStories(subFeature.id)
@@ -508,16 +528,21 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
     load()
   }, [load])
 
+  useEffect(() => {
+    if (!jobRunning) {
+      void load()
+    }
+  }, [jobRunning, load])
+
   async function runGenerate() {
     if (!onRunJob) return
-    setGenerating(true)
+    setEnqueueing(true)
     try {
       const isRegen = stories.length > 0
       const label = isRegen ? `Regenerate stories: ${subFeature.title}` : `Generate stories: ${subFeature.title}`
       await onRunJob(label, () => subFeatureApi.generateStories(subFeature.id))
-      await load()
     } finally {
-      setGenerating(false)
+      setEnqueueing(false)
     }
   }
 
@@ -531,7 +556,7 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
   }
 
   const canGenerate = subFeature.status === 'approved' && onRunJob
-  const isBusy = busy || generating
+  const isBusy = busy || enqueueing || jobRunning
 
   return (
     <>
@@ -561,7 +586,11 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
           <h4>Stories {stories.length > 0 ? `(${stories.length})` : ''}</h4>
           {canGenerate && (
             <button type="button" className="btn btn-primary btn-sm" onClick={handleGenerateStories} disabled={isBusy}>
-              {stories.length > 0 ? 'Regenerate stories' : 'Generate stories'}
+              {jobRunning
+                ? 'Generating…'
+                : stories.length > 0
+                  ? 'Regenerate stories'
+                  : 'Generate stories'}
             </button>
           )}
         </div>

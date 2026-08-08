@@ -10,7 +10,9 @@ function JobStatusIcon({ status }) {
 }
 
 function statusLabel(job) {
-  if (job.status === 'running') return 'Running…'
+  if (job.status === 'running') {
+    return job.progress || 'Running…'
+  }
   if (job.status === 'succeeded') return 'Completed'
   if (job.status === 'cancelled') return 'Cancelled'
   return job.error || 'Failed'

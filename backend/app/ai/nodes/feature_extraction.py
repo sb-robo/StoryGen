@@ -6,6 +6,7 @@ from app.ai.states.feature_state import (
     FeatureCompletenessCritique,
     FeatureExtractionOutput,
     FeatureRevisionOutput,
+    RefinedFeatureOutput,
 )
 
 
@@ -29,6 +30,7 @@ async def generate_features(
     brd_name: str,
     brd_content: str,
     pipeline_context: str = "",
+    existing_constraints: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
@@ -43,6 +45,8 @@ async def generate_features(
                     brd_name=brd_name,
                     brd_content=brd_content,
                     pipeline_context=pipeline_context or "(no extra settings)",
+                    existing_constraints=existing_constraints
+                    or "(no existing feature constraints)",
                 ),
             },
         ],
@@ -60,6 +64,7 @@ async def critique_completeness(
     *,
     draft: FeatureExtractionOutput,
     pipeline_context: str = "",
+    existing_constraints: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
@@ -80,6 +85,8 @@ async def critique_completeness(
                     section_hints=hints,
                     feature_titles=feature_titles,
                     pipeline_context=pipeline_context or "(no extra settings)",
+                    existing_constraints=existing_constraints
+                    or "(no existing feature constraints)",
                 ),
             },
         ],
@@ -99,6 +106,7 @@ async def revise_features(
     draft: FeatureExtractionOutput,
     critique: FeatureCompletenessCritique,
     pipeline_context: str = "",
+    existing_constraints: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
@@ -117,12 +125,57 @@ async def revise_features(
                     feedback=critique.feedback,
                     missing_sections=", ".join(critique.missing_sections) or "none",
                     pipeline_context=pipeline_context or "(no extra settings)",
+                    existing_constraints=existing_constraints
+                    or "(no existing feature constraints)",
                 ),
             },
         ],
         response_model=FeatureRevisionOutput,
         node_name="feature_revise",
         iteration=iteration,
+        operation_id=operation_id,
+        user_id=user_id,
+        brd_id=brd_id,
+    )
+
+
+async def refine_feature_from_answers(
+    client: OpenAIClient,
+    *,
+    brd_name: str,
+    feature_title: str,
+    feature_description: str,
+    source_excerpt: str | None,
+    rationale: str,
+    confidence: float,
+    clarifying_qa: str,
+    brd_context: str = "",
+    pipeline_context: str = "",
+    operation_id: str | None,
+    user_id: int,
+    brd_id: int,
+) -> RefinedFeatureOutput:
+    return await client.parse_structured(
+        messages=[
+            {"role": "system", "content": prompts.REFINE_FROM_ANSWERS_SYSTEM},
+            {
+                "role": "user",
+                "content": prompts.REFINE_FROM_ANSWERS_USER.format(
+                    brd_name=brd_name,
+                    pipeline_context=pipeline_context or "(no extra settings)",
+                    feature_title=feature_title,
+                    feature_description=feature_description,
+                    source_excerpt=source_excerpt or "(none)",
+                    rationale=rationale,
+                    confidence=confidence,
+                    clarifying_qa=clarifying_qa or "(none)",
+                    brd_context=brd_context or "(no relevant BRD sections retrieved)",
+                ),
+            },
+        ],
+        response_model=RefinedFeatureOutput,
+        node_name="feature_refine_from_answers",
+        iteration=0,
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,

@@ -309,7 +309,9 @@ export function clarifyingApproveBlockMessage(feature) {
 export function regenerateConfirmMessage(childLabel = 'items') {
   return (
     `This replaces draft and pending_review ${childLabel}. ` +
-    `Approved and rejected ${childLabel} are kept.`
+    `Approved and rejected ${childLabel} are kept. ` +
+    `Regeneration is guided: approved items stay as constraints so the model avoids recreating them, ` +
+    `and any draft edits you made are treated as soft hints.`
   )
 }
 

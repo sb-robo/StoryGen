@@ -268,18 +268,29 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   }
 
   async function runJob(label, fn) {
+    // Only lock the UI while enqueueing. Tracking/polling must not block
+    // generating for other features/sub-features concurrently.
     setBusy(true)
+    let op
     try {
-      const op = await fn()
-      await trackJob(op, { label, brdId, onComplete: refreshAll })
-      await refreshAll()
+      op = await fn()
     } finally {
       setBusy(false)
     }
+    void trackJob(op, {
+      label,
+      brdId,
+      onComplete: () => {
+        void refreshAll()
+      },
+    }).catch(() => {
+      // Toast/error handled inside JobsContext.trackJob
+    })
+    return op
   }
 
   async function handleRunJob(label, fn) {
-    await runJob(label, fn)
+    return runJob(label, fn)
   }
 
   async function handleExport(format = 'csv') {
@@ -693,6 +704,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
             <div className={`workspace-main ${detailInMiddle && !isNarrow ? 'workspace-main-compact' : ''}`}>
               {workspaceTab === 'overview' && (
                 <OverviewTab
+                  brdId={brd.id}
                   pipeline={pipeline}
                   reviewQueue={reviewQueue}
                   blockers={blockers}

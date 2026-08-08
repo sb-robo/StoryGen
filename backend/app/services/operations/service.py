@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.user import User
+from app.repositories.llm_call_log_repository import LlmCallLogRepository
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.feature_schema import FeatureExtractionResultResponse
 from app.schemas.operation_schema import (
@@ -24,6 +25,7 @@ from app.services.ai.story_service import StoryService
 from app.services.ai.sub_feature_service import SubFeatureService
 from app.services.ai.test_case_service import TestCaseService
 from app.services.brd.service import BrdService
+from app.utils.operation_progress import format_operation_progress
 from app.utils.operation_urls import operation_status_url
 
 
@@ -31,6 +33,7 @@ class OperationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = OperationRepository(db)
+        self.llm_log_repo = LlmCallLogRepository(db)
         self.brd_service = BrdService(db)
         self.feature_service = FeatureService(db)
         self.sub_feature_service = SubFeatureService(db)
@@ -39,7 +42,11 @@ class OperationService:
         self.test_case_service = TestCaseService(db)
 
     def _to_response(
-        self, operation: AsyncOperation, *, include_user_id: bool = False
+        self,
+        operation: AsyncOperation,
+        *,
+        include_user_id: bool = False,
+        progress: str | None = None,
     ) -> OperationResponse:
         return OperationResponse(
             operation_id=operation.id,
@@ -49,10 +56,19 @@ class OperationService:
             resource_type=operation.resource_type,
             resource_id=operation.resource_id,
             error_message=operation.error_message,
+            progress=progress
+            if progress is not None
+            else format_operation_progress(status=operation.status, latest_log=None),
             created_at=operation.created_at,
             updated_at=operation.updated_at,
             completed_at=operation.completed_at,
         )
+
+    async def _progress_for(self, operation: AsyncOperation) -> str:
+        latest = None
+        if operation.status == OperationStatus.RUNNING.value:
+            latest = await self.llm_log_repo.latest_for_operation(operation.id)
+        return format_operation_progress(status=operation.status, latest_log=latest)
 
     async def list_operations_admin(
         self,
@@ -138,7 +154,8 @@ class OperationService:
         operation = await self._get_owned_operation(
             user_id, operation_id, allowed_types=allowed_types
         )
-        return self._to_response(operation)
+        progress = await self._progress_for(operation)
+        return self._to_response(operation, progress=progress)
 
     async def get_result(
         self,

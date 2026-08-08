@@ -55,6 +55,7 @@ export function JobsProvider({ children }) {
         label: label || 'Background job',
         brdId: resolvedBrdId,
         status: 'running',
+        progress: op.progress || 'Queued…',
         error: null,
         startedAt: Date.now(),
         statusUrl: op.status_url,
@@ -74,6 +75,7 @@ export function JobsProvider({ children }) {
             const patch = {
               status: mapped,
               error: status.error_message ?? null,
+              progress: status.progress ?? null,
             }
             if (status.resource_type != null) patch.resourceType = status.resource_type
             if (status.resource_id != null) patch.resourceId = status.resource_id
@@ -149,11 +151,27 @@ export function JobsProvider({ children }) {
 
   const runningCount = jobs.filter((j) => j.status === 'running').length
 
+  const isJobRunningFor = useCallback(
+    (resourceType, resourceId, operationType = null) => {
+      if (resourceType == null || resourceId == null) return false
+      const rid = Number(resourceId)
+      return jobs.some(
+        (j) =>
+          j.status === 'running' &&
+          j.resourceType === resourceType &&
+          Number(j.resourceId) === rid &&
+          (operationType == null || j.operationType === operationType),
+      )
+    },
+    [jobs],
+  )
+
   return (
     <JobsContext.Provider
       value={{
         jobs,
         runningCount,
+        isJobRunningFor,
         drawerOpen,
         setDrawerOpen,
         trackJob,

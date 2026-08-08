@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { exportReadinessLabel, PIPELINE_STAGES } from '../utils/pipeline'
+import { LlmUsagePanel } from './LlmUsagePanel'
 
 const VISIBLE_BLOCKERS = 3
 
@@ -49,6 +50,7 @@ function BlockersPanel({ blockers }) {
 }
 
 export function OverviewTab({
+  brdId,
   pipeline,
   reviewQueue,
   blockers,
@@ -158,6 +160,8 @@ export function OverviewTab({
             </ul>
           </div>
         )}
+
+        {brdId != null && <LlmUsagePanel brdId={brdId} />}
       </div>
     </section>
   )

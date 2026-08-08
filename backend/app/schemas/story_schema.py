@@ -22,6 +22,7 @@ class StoryResponse(BaseModel):
     confidence: float
     rationale: str
     source_excerpt: str | None = None
+    source_chunk_id: int | None = None
     status: str
     story_points: int | None = None
     points_rationale: str | None = None

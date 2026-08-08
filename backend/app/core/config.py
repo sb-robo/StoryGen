@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     FRONTEND_BASE_URL: str = "http://localhost:5173"
     DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
     AUTH_DISABLED: bool = False
     DEV_USER_EMAIL: str | None = None
     BRD_STORAGE_DIR: str = str(BACKEND_DIR / "storage" / "brds")

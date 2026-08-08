@@ -23,6 +23,7 @@ class TestCaseResponse(BaseModel):
     confidence: float
     rationale: str
     source_excerpt: str | None = None
+    source_chunk_id: int | None = None
     status: str
     reviewed_by: int | None = None
     reviewed_at: datetime | None = None

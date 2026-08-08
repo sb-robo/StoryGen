@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.agents.story_generation import generate_stories_from_sub_feature
+from app.ai.feature_extraction.chunk_link import resolve_source_chunk_id
 from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
@@ -59,6 +60,7 @@ class StoryService:
             confidence=item.confidence,
             rationale=item.rationale,
             source_excerpt=item.source_excerpt,
+            source_chunk_id=item.source_chunk_id,
             status=item.status,
             story_points=item.story_points,
             points_rationale=item.points_rationale,
@@ -171,6 +173,7 @@ class StoryService:
         )
 
         await self.repo.delete_non_finalized_for_sub_feature(sub_feature.id)
+        chunks = await self.chunk_repo.list_for_brd(feature.brd_id)
 
         items: list[BrdStory] = []
         for idx, item in enumerate(output.stories):
@@ -187,6 +190,11 @@ class StoryService:
                     confidence=item.confidence,
                     rationale=item.rationale.strip(),
                     source_excerpt=item.source_excerpt,
+                    source_chunk_id=resolve_source_chunk_id(
+                        chunks,
+                        section_path=item.source_section_path,
+                        source_excerpt=item.source_excerpt,
+                    ),
                     status=StoryReviewStatus.PENDING_REVIEW.value,
                     sort_order=idx,
                 )

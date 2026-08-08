@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_document import BrdDocument, BrdStatus
 from app.repositories.brd_repository import BrdRepository
+from app.repositories.llm_call_log_repository import LlmCallLogRepository
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.brd_schema import (
     BrdContentResponse,
@@ -20,6 +21,11 @@ from app.schemas.brd_schema import (
     BrdImageResponse,
     BrdListResponse,
     BrdResponse,
+)
+from app.schemas.llm_usage_schema import (
+    LlmCallLogResponse,
+    LlmNodeUsage,
+    LlmUsageSummaryResponse,
 )
 from app.schemas.operation_schema import OperationResponse
 from app.schemas.pipeline_settings_schema import (
@@ -80,6 +86,7 @@ class BrdService:
         self.db = db
         self.repo = BrdRepository(db)
         self.operation_repo = OperationRepository(db)
+        self.llm_log_repo = LlmCallLogRepository(db)
         self.storage = storage or BrdStorageService()
         self.parser_service = parser_service or BrdParserService(storage=self.storage)
         self.chunk_service = chunk_service or BrdChunkService(db)
@@ -510,6 +517,38 @@ class BrdService:
                 )
 
         return await self._to_detail(brd, include_text=False)
+
+    async def get_llm_usage(
+        self, user_id: int, brd_id: int, *, recent_limit: int = 25
+    ) -> LlmUsageSummaryResponse:
+        await self._get_owned_brd(user_id, brd_id)
+        summary = await self.llm_log_repo.summarize_for_brd(brd_id, user_id=user_id)
+        recent = await self.llm_log_repo.list_for_brd(
+            brd_id, user_id=user_id, limit=recent_limit
+        )
+        return LlmUsageSummaryResponse(
+            brd_id=brd_id,
+            total_calls=summary["total_calls"],
+            total_tokens_in=summary["total_tokens_in"],
+            total_tokens_out=summary["total_tokens_out"],
+            total_latency_ms=summary["total_latency_ms"],
+            by_node=[LlmNodeUsage(**row) for row in summary["by_node"]],
+            recent_calls=[
+                LlmCallLogResponse(
+                    id=row.id,
+                    operation_id=row.operation_id,
+                    brd_id=row.brd_id,
+                    node_name=row.node_name,
+                    iteration=row.iteration,
+                    model=row.model,
+                    tokens_in=row.tokens_in,
+                    tokens_out=row.tokens_out,
+                    latency_ms=row.latency_ms,
+                    created_at=row.created_at,
+                )
+                for row in recent
+            ],
+        )
 
     async def list_chunks(self, user_id: int, brd_id: int):
         brd = await self._get_owned_brd(user_id, brd_id)

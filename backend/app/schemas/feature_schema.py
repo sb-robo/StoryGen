@@ -29,6 +29,7 @@ class FeatureResponse(BaseModel):
     clarifying_questions: list[str] = Field(default_factory=list)
     clarifying_answers: list[ClarifyingAnswer] = Field(default_factory=list)
     source_excerpt: str | None = None
+    source_chunk_id: int | None = None
     status: str
     reviewed_by: int | None = None
     reviewed_at: datetime | None = None

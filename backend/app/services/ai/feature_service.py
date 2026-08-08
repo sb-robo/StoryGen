@@ -3,7 +3,10 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.feature_extraction.chunk_link import resolve_source_chunk_id
+from app.ai.feature_extraction.constraints import format_existing_feature_constraints
 from app.ai.feature_extraction.extractor import FeatureExtractor
+from app.ai.nodes.feature_extraction import refine_feature_from_answers
 from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_document import BrdStatus
@@ -16,6 +19,7 @@ from app.repositories.feature_repository import (
     decode_clarifying_questions,
     encode_clarifying_answers,
     encode_clarifying_questions,
+    format_clarifying_qa_for_prompt,
 )
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.feature_schema import (
@@ -28,6 +32,7 @@ from app.schemas.feature_schema import (
 )
 from app.schemas.operation_schema import OperationResponse
 from app.schemas.pipeline_settings_schema import format_pipeline_context
+from app.services.ai._chunk_context import fetch_brd_chunk_context
 from app.services.brd.storage_service import BrdStorageService
 
 
@@ -42,6 +47,7 @@ class FeatureService:
         self.db = db
         self.repo = FeatureRepository(db)
         self.brd_repo = BrdRepository(db)
+        self.chunk_repo = BrdChunkRepository(db)
         self.operation_repo = OperationRepository(db)
         self.storage = storage or BrdStorageService()
         self.openai_client = openai_client or OpenAIClient(db)
@@ -62,6 +68,7 @@ class FeatureService:
                 for item in decode_clarifying_answers(feature.clarifying_answers)
             ],
             source_excerpt=feature.source_excerpt,
+            source_chunk_id=feature.source_chunk_id,
             status=feature.status,
             reviewed_by=feature.reviewed_by,
             reviewed_at=feature.reviewed_at,
@@ -168,9 +175,28 @@ class FeatureService:
         if not brd:
             return None
 
+        existing = await self.repo.list_for_brd(operation.user_id, brd.id)
+        approved = [
+            (f.title, f.description)
+            for f in existing
+            if f.status == FeatureStatus.APPROVED.value
+        ]
+        edited_pending = [
+            (f.title, f.description)
+            for f in existing
+            if f.status
+            in {FeatureStatus.DRAFT.value, FeatureStatus.PENDING_REVIEW.value}
+            and f.updated_at
+            and f.created_at
+            and f.updated_at > f.created_at
+        ]
+        existing_constraints = format_existing_feature_constraints(
+            approved, edited_pending=edited_pending or None
+        )
+
         extractor = FeatureExtractor(
             self.openai_client,
-            BrdChunkRepository(self.db),
+            self.chunk_repo,
             storage=self.storage,
         )
         output = await extractor.extract(
@@ -180,9 +206,11 @@ class FeatureService:
             ),
             operation_id=operation_id,
             user_id=operation.user_id,
+            existing_constraints=existing_constraints,
         )
 
         await self.repo.delete_non_finalized_for_brd(brd.id)
+        chunks = await self.chunk_repo.list_for_brd(brd.id)
 
         features: list[BrdFeature] = []
         for idx, item in enumerate(output.features):
@@ -199,6 +227,11 @@ class FeatureService:
                         item.clarifying_questions
                     ),
                     source_excerpt=item.source_excerpt,
+                    source_chunk_id=resolve_source_chunk_id(
+                        chunks,
+                        section_path=item.source_section_path,
+                        source_excerpt=item.source_excerpt,
+                    ),
                     status=FeatureStatus.PENDING_REVIEW.value,
                     sort_order=idx,
                 )
@@ -374,3 +407,114 @@ class FeatureService:
             reviewed_by=feature.reviewed_by,
             reviewed_at=feature.reviewed_at,
         )
+
+    async def refine_from_answers(self, user_id: int, feature_id: int) -> FeatureResponse:
+        """Revise a feature using saved clarifying answers (sync LLM call)."""
+        feature = await self._get_owned_feature(user_id, feature_id)
+        if feature.status not in {
+            FeatureStatus.DRAFT.value,
+            FeatureStatus.PENDING_REVIEW.value,
+            FeatureStatus.APPROVED.value,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only draft, pending_review, or approved features can be refined.",
+            )
+
+        questions = decode_clarifying_questions(feature.clarifying_questions)
+        answers = decode_clarifying_answers(feature.clarifying_answers)
+        if not questions:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Feature has no clarifying questions to refine from.",
+            )
+        if not answers:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Save clarifying answers before refining the feature.",
+            )
+        if len(answers) < len(questions):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Answer all clarifying questions before refining "
+                    f"({len(questions) - len(answers)} unanswered)."
+                ),
+            )
+        if not self.openai_client.is_configured:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OPENAI_API_KEY is not configured on the server.",
+            )
+
+        brd = await self.brd_repo.get_by_id(feature.brd_id)
+        if not brd:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="BRD not found",
+            )
+
+        clarifying_qa = format_clarifying_qa_for_prompt(questions, answers)
+        brd_context = await fetch_brd_chunk_context(
+            self.openai_client,
+            self.chunk_repo,
+            brd_id=feature.brd_id,
+            query_parts=[
+                feature.title,
+                feature.description,
+                feature.source_excerpt,
+                clarifying_qa,
+            ],
+        )
+        refined = await refine_feature_from_answers(
+            self.openai_client,
+            brd_name=brd.name,
+            feature_title=feature.title,
+            feature_description=feature.description,
+            source_excerpt=feature.source_excerpt,
+            rationale=feature.rationale,
+            confidence=feature.confidence,
+            clarifying_qa=clarifying_qa,
+            brd_context=brd_context,
+            pipeline_context=format_pipeline_context(
+                brd.pipeline_settings, for_stage="features"
+            ),
+            operation_id=None,
+            user_id=user_id,
+            brd_id=feature.brd_id,
+        )
+
+        chunks = await self.chunk_repo.list_for_brd(feature.brd_id)
+        feature.title = refined.title.strip()
+        feature.description = refined.description.strip()
+        feature.confidence = refined.confidence
+        feature.rationale = refined.rationale.strip()
+        if refined.source_excerpt is not None:
+            feature.source_excerpt = refined.source_excerpt
+        feature.clarifying_questions = encode_clarifying_questions(
+            refined.clarifying_questions
+        )
+        # Keep existing answers only for questions that remain
+        remaining_q = set(refined.clarifying_questions)
+        if remaining_q:
+            kept = [
+                item
+                for item in answers
+                if item.get("question") in remaining_q and item.get("answer")
+            ]
+            feature.clarifying_answers = encode_clarifying_answers(kept)
+        else:
+            feature.clarifying_answers = encode_clarifying_answers([])
+        feature.source_chunk_id = resolve_source_chunk_id(
+            chunks,
+            section_path=refined.source_section_path,
+            source_excerpt=feature.source_excerpt,
+        ) or feature.source_chunk_id
+
+        if feature.status == FeatureStatus.APPROVED.value:
+            feature.status = FeatureStatus.PENDING_REVIEW.value
+            feature.reviewed_by = None
+            feature.reviewed_at = None
+
+        feature = await self.repo.update(feature)
+        return self._to_response(feature)
