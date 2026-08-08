@@ -12,11 +12,13 @@ async def extract_features_from_brd(
     operation_id: str | None,
     user_id: int,
     brd_id: int,
+    section_hints: str | None = None,
 ) -> FeatureExtractionOutput:
     return await run_feature_extraction_graph(
         client,
         brd_name=brd_name,
         brd_content=brd_content,
+        section_hints=section_hints,
         pipeline_context=pipeline_context,
         operation_id=operation_id,
         user_id=user_id,

@@ -1,5 +1,6 @@
 from app.schemas.pipeline_settings_schema import (
     BrdPipelineSettings,
+    BrdChunkStrategy,
     FeatureCountPreference,
     format_pipeline_context,
     parse_pipeline_settings,
@@ -9,6 +10,7 @@ from app.schemas.pipeline_settings_schema import (
 def test_parse_defaults():
     settings = parse_pipeline_settings(None)
     assert settings.feature_count == FeatureCountPreference.AUTO
+    assert settings.chunk_level == BrdChunkStrategy.SECTION
     assert settings.instructions is None
 
 

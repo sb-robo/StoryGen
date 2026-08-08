@@ -1,5 +1,7 @@
 import {
+  CHUNK_STRATEGY_OPTIONS,
   FEATURE_COUNT_OPTIONS,
+  getChunkStrategyGuide,
   POINTING_SCALE_OPTIONS,
   STORY_STYLE_OPTIONS,
   SUB_FEATURE_COUNT_OPTIONS,
@@ -10,6 +12,8 @@ export function PipelineSettingsForm({ settings, onChange }) {
   function update(key, value) {
     onChange({ ...settings, [key]: value })
   }
+
+  const chunkGuide = getChunkStrategyGuide(settings.chunk_level)
 
   return (
     <div className="pipeline-settings">
@@ -119,6 +123,32 @@ export function PipelineSettingsForm({ settings, onChange }) {
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="chunk-strategy-block">
+        <label className="field">
+          <span>BRD chunking strategy</span>
+          <select value={settings.chunk_level} onChange={(e) => update('chunk_level', e.target.value)}>
+            {CHUNK_STRATEGY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+                {opt.recommended ? ' (recommended)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="chunk-strategy-guide" role="note">
+          <p className="chunk-strategy-guide-summary">{chunkGuide.summary}</p>
+          <p>
+            <strong>When to use:</strong> {chunkGuide.whenToUse}
+          </p>
+          <p>
+            <strong>Tradeoffs:</strong> {chunkGuide.tradeoffs}
+          </p>
+          <p className="chunk-strategy-guide-hint">
+            Applied on parse/reparse. Changing strategy re-indexes chunks without re-uploading the file.
+          </p>
+        </div>
       </div>
 
       <div className="pipeline-settings-grid">

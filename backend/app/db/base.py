@@ -1,6 +1,7 @@
 from app.db.models.async_operation import AsyncOperation
 from app.db.models.base import Base
 from app.db.models.brd_document import BrdDocument
+from app.db.models.brd_chunk import BrdChunk
 from app.db.models.brd_feature import BrdFeature
 from app.db.models.brd_sub_feature import BrdSubFeature
 from app.db.models.brd_story import BrdStory

@@ -2,7 +2,7 @@ from app.ai.nodes import story_points as nodes
 from app.ai.openai_client import OpenAIClient
 from app.ai.rag.story_retrieval import retrieve_similar_stories
 from app.ai.states.story_points_state import StoryPointsEstimate
-from app.core.config import settings
+from app.ai.graphs.refinement_loop import RefinementLoop
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -20,8 +20,6 @@ async def run_story_points_graph(
     operation_id: str | None,
     max_iterations: int | None = None,
 ) -> StoryPointsEstimate:
-    cap = max_iterations if max_iterations is not None else settings.LLM_MAX_ITERATIONS
-
     similar = await retrieve_similar_stories(
         db,
         client,
@@ -32,21 +30,24 @@ async def run_story_points_graph(
         exclude_story_id=story_id,
     )
 
-    estimate = await nodes.estimate_points(
-        client,
-        title=title,
-        description=description,
-        acceptance_criteria=acceptance_criteria,
-        similar_stories=similar,
-        pipeline_context=pipeline_context,
-        operation_id=operation_id,
-        user_id=user_id,
-        brd_id=brd_id,
-        iteration=0,
-    )
+    loop = RefinementLoop[StoryPointsEstimate, object](client, max_iterations=max_iterations)
 
-    for i in range(cap):
-        critique = await nodes.critique_estimate(
+    async def generate() -> StoryPointsEstimate:
+        return await nodes.estimate_points(
+            client,
+            title=title,
+            description=description,
+            acceptance_criteria=acceptance_criteria,
+            similar_stories=similar,
+            pipeline_context=pipeline_context,
+            operation_id=operation_id,
+            user_id=user_id,
+            brd_id=brd_id,
+            iteration=0,
+        )
+
+    async def critique(estimate: StoryPointsEstimate, iteration: int):
+        return await nodes.critique_estimate(
             client,
             title=title,
             description=description,
@@ -55,25 +56,29 @@ async def run_story_points_graph(
             operation_id=operation_id,
             user_id=user_id,
             brd_id=brd_id,
-            iteration=i + 1,
+            iteration=iteration,
         )
-        if critique.passes:
-            break
 
+    async def revise(estimate: StoryPointsEstimate, critique_result, iteration: int):
         revised = await nodes.revise_estimate(
             client,
             title=title,
             estimate=estimate,
-            critique=critique,
+            critique=critique_result,
             operation_id=operation_id,
             user_id=user_id,
             brd_id=brd_id,
-            iteration=i + 1,
+            iteration=iteration,
         )
-        estimate = StoryPointsEstimate(
+        return StoryPointsEstimate(
             story_points=revised.story_points,
             rationale=revised.rationale,
             confidence=revised.confidence,
         )
 
-    return estimate
+    return await loop.run(
+        generate=generate,
+        critique=critique,
+        passes=lambda result: result.passes,
+        revise=revise,
+    )

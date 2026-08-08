@@ -40,6 +40,8 @@ from app.schemas.brd_schema import (
     BrdSortOrder,
     BrdStatusFilter,
 )
+from app.schemas.brd_chunk_schema import BrdChunkListResponse
+from app.schemas.chunk_strategy_schema import ChunkStrategyListResponse, build_chunk_strategy_list
 from app.schemas.pipeline_settings_schema import BrdPipelineSettings
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.feature_schema import FeatureListResponse, FeatureStatusFilter
@@ -164,6 +166,15 @@ async def get_brd_operation_result(
         allowed_types=BRD_OPERATION_TYPES,
         include_text=include_text,
     )
+
+
+@router.get(
+    "/chunk-strategies",
+    response_model=ChunkStrategyListResponse,
+    summary="List BRD chunking strategies with usage guide",
+)
+async def list_chunk_strategies() -> ChunkStrategyListResponse:
+    return build_chunk_strategy_list()
 
 
 @router.get(
@@ -312,6 +323,23 @@ async def get_brd_content(
     brd_service: BrdService = Depends(get_brd_service),
 ) -> BrdContentResponse:
     return await brd_service.get_content(current_user.id, brd_id)
+
+
+@router.get(
+    "/{brd_id}/chunks",
+    response_model=BrdChunkListResponse,
+    summary="List indexed BRD markdown chunks",
+    description=(
+        "Returns chunks created from parsed markdown using the BRD's `chunk_level` "
+        "pipeline setting (section or subsection)."
+    ),
+)
+async def list_brd_chunks(
+    brd_id: int,
+    current_user: User = Depends(get_current_user),
+    brd_service: BrdService = Depends(get_brd_service),
+) -> BrdChunkListResponse:
+    return await brd_service.list_chunks(current_user.id, brd_id)
 
 
 @router.get(

@@ -3,11 +3,12 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.agents.feature_extraction import extract_features_from_brd
+from app.ai.feature_extraction.extractor import FeatureExtractor
 from app.ai.openai_client import OpenAIClient
 from app.db.models.async_operation import AsyncOperation, OperationStatus, OperationType
 from app.db.models.brd_document import BrdStatus
 from app.db.models.brd_feature import BrdFeature, FeatureStatus
+from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import (
     FeatureRepository,
@@ -167,20 +168,18 @@ class FeatureService:
         if not brd:
             return None
 
-        text = await self.storage.read_parsed_markdown(brd.parsed_text_path)
-        if not text:
-            raise RuntimeError("Parsed BRD content is not available")
-
-        output = await extract_features_from_brd(
+        extractor = FeatureExtractor(
             self.openai_client,
-            brd_name=brd.name,
-            brd_content=text,
+            BrdChunkRepository(self.db),
+            storage=self.storage,
+        )
+        output = await extractor.extract(
+            brd=brd,
             pipeline_context=format_pipeline_context(
                 brd.pipeline_settings, for_stage="features"
             ),
             operation_id=operation_id,
             user_id=operation.user_id,
-            brd_id=brd.id,
         )
 
         await self.repo.delete_non_finalized_for_brd(brd.id)

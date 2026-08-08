@@ -26,6 +26,7 @@ from app.schemas.pipeline_settings_schema import (
     BrdPipelineSettings,
     parse_pipeline_settings,
 )
+from app.services.brd.chunk_service import BrdChunkService
 from app.services.brd.parser_service import BrdParserService
 from app.services.brd.storage_service import BrdStorageService
 
@@ -74,12 +75,14 @@ class BrdService:
         db: AsyncSession,
         storage: BrdStorageService | None = None,
         parser_service: BrdParserService | None = None,
+        chunk_service: BrdChunkService | None = None,
     ):
         self.db = db
         self.repo = BrdRepository(db)
         self.operation_repo = OperationRepository(db)
         self.storage = storage or BrdStorageService()
         self.parser_service = parser_service or BrdParserService(storage=self.storage)
+        self.chunk_service = chunk_service or BrdChunkService(db)
 
     def _normalize_extension(self, filename: str) -> str:
         extension = Path(filename).suffix.lower()
@@ -373,7 +376,13 @@ class BrdService:
         brd.image_count = len(parsed.images)
         brd.status = BrdStatus.PARSED.value
         brd.error_message = None
-        return await self.repo.update(brd)
+        updated = await self.repo.update(brd)
+        await self.chunk_service.index_parsed_markdown(
+            updated,
+            parsed.text,
+            parser_tables=parsed.tables,
+        )
+        return updated
 
     async def list_brds(
         self,
@@ -484,9 +493,32 @@ class BrdService:
         self, user_id: int, brd_id: int, settings: BrdPipelineSettings
     ) -> BrdDetailResponse:
         brd = await self._get_owned_brd(user_id, brd_id)
+        previous = parse_pipeline_settings(brd.pipeline_settings)
         brd.pipeline_settings = settings.model_dump(mode="json")
         brd = await self.repo.update(brd)
+
+        if (
+            brd.status == BrdStatus.PARSED.value
+            and previous.chunk_level != settings.chunk_level
+        ):
+            text = await self.storage.read_parsed_markdown(brd.parsed_text_path)
+            if text:
+                await self.chunk_service.index_parsed_markdown(
+                    brd,
+                    text,
+                    chunk_strategy=settings.chunk_level,
+                )
+
         return await self._to_detail(brd, include_text=False)
+
+    async def list_chunks(self, user_id: int, brd_id: int):
+        brd = await self._get_owned_brd(user_id, brd_id)
+        if brd.status != BrdStatus.PARSED.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="BRD must be parsed before chunks are available",
+            )
+        return await self.chunk_service.list_chunks(brd)
 
     async def rename_brd(
         self, user_id: int, brd_id: int, new_name: str
@@ -575,6 +607,11 @@ class BrdService:
         ]
 
     async def _to_summary(self, brd: BrdDocument) -> BrdResponse:
+        chunk_count = (
+            await self.chunk_service.chunk_count(brd.id)
+            if brd.status == BrdStatus.PARSED.value
+            else 0
+        )
         return BrdResponse(
             id=brd.id,
             user_id=brd.user_id,
@@ -592,6 +629,7 @@ class BrdService:
             updated_at=brd.updated_at,
             preview=await self._preview(brd),
             pipeline_settings=parse_pipeline_settings(brd.pipeline_settings),
+            chunk_count=chunk_count,
         )
 
     async def _to_detail(

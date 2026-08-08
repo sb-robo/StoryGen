@@ -1,7 +1,7 @@
 from app.ai.nodes import test_case_generation as nodes
 from app.ai.openai_client import OpenAIClient
 from app.ai.states.test_case_state import TestCaseGenerationOutput
-from app.core.config import settings
+from app.ai.graphs.refinement_loop import RefinementLoop
 
 
 async def run_test_case_generation_graph(
@@ -16,44 +16,49 @@ async def run_test_case_generation_graph(
     brd_id: int,
     max_iterations: int | None = None,
 ) -> TestCaseGenerationOutput:
-    cap = max_iterations if max_iterations is not None else settings.LLM_MAX_ITERATIONS
+    loop = RefinementLoop[TestCaseGenerationOutput, object](client, max_iterations=max_iterations)
 
-    draft = await nodes.generate_test_cases(
-        client,
-        title=title,
-        description=description,
-        acceptance_criteria=acceptance_criteria,
-        pipeline_context=pipeline_context,
-        operation_id=operation_id,
-        user_id=user_id,
-        brd_id=brd_id,
-        iteration=0,
-    )
+    async def generate() -> TestCaseGenerationOutput:
+        return await nodes.generate_test_cases(
+            client,
+            title=title,
+            description=description,
+            acceptance_criteria=acceptance_criteria,
+            pipeline_context=pipeline_context,
+            operation_id=operation_id,
+            user_id=user_id,
+            brd_id=brd_id,
+            iteration=0,
+        )
 
-    for i in range(cap):
-        critique = await nodes.critique_coverage(
+    async def critique(draft: TestCaseGenerationOutput, iteration: int):
+        return await nodes.critique_coverage(
             client,
             title=title,
             draft=draft,
             operation_id=operation_id,
             user_id=user_id,
             brd_id=brd_id,
-            iteration=i + 1,
+            iteration=iteration,
         )
-        if critique.passes:
-            break
 
+    async def revise(draft: TestCaseGenerationOutput, critique_result, iteration: int):
         revised = await nodes.revise_test_cases(
             client,
             title=title,
             description=description,
             draft=draft,
-            critique=critique,
+            critique=critique_result,
             operation_id=operation_id,
             user_id=user_id,
             brd_id=brd_id,
-            iteration=i + 1,
+            iteration=iteration,
         )
-        draft = TestCaseGenerationOutput(test_cases=revised.test_cases)
+        return TestCaseGenerationOutput(test_cases=revised.test_cases)
 
-    return draft
+    return await loop.run(
+        generate=generate,
+        critique=critique,
+        passes=lambda result: result.passes,
+        revise=revise,
+    )

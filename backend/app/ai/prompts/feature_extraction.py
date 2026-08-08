@@ -10,7 +10,9 @@ Rules:
 - Include source_excerpt with a short quote or section title when possible.
 """
 
-EXTRACT_USER = """Extract all product features from this BRD Markdown.
+EXTRACT_USER = """Extract all product features from this BRD content.
+
+Content is indexed by section path when chunking is enabled — use section headers as scope hints.
 
 BRD name: {brd_name}
 

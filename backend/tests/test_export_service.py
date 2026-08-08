@@ -13,13 +13,16 @@ from app.db.models.brd_story import BrdStory
 from app.db.models.brd_sub_feature import BrdSubFeature
 from app.db.models.brd_test_case import BrdTestCase
 from app.repositories.story_repository import encode_acceptance_criteria
-from app.services.export.service import CSV_COLUMNS, ExportRow, ExportService
+from app.services.export.base import ExportRow
+from app.services.export.factory import ExportFormatFactory
+from app.services.export.service import CSV_COLUMNS, ExportService
 
 
 def _service() -> ExportService:
     service = ExportService.__new__(ExportService)
     service.db = MagicMock()
     service.brd_repo = MagicMock()
+    service.format_factory = ExportFormatFactory()
     return service
 
 

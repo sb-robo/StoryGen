@@ -9,8 +9,64 @@ export const DEFAULT_PIPELINE_SETTINGS = {
   story_style: 'classic',
   pointing_scale: 'fibonacci',
   test_depth: 'standard',
+  chunk_level: 'section',
   export_project_key: '',
   export_epic_prefix: '',
+}
+
+/** Chunking strategies — keep in sync with backend BrdChunkStrategy / GET /brds/chunk-strategies */
+export const CHUNK_STRATEGY_OPTIONS = [
+  {
+    value: 'section',
+    label: 'Section (H1 + H2)',
+    summary: 'Split on major section headings — recommended default.',
+    whenToUse:
+      'Standard BRDs with clear headings. Best for feature extraction and first-pass review.',
+    tradeoffs: 'Broader chunks; may merge related sub-topics under one section.',
+    recommended: true,
+  },
+  {
+    value: 'subsection',
+    label: 'Subsection (H1 + H2 + H3)',
+    summary: 'Finer splits at third-level headings.',
+    whenToUse:
+      'Long BRDs where H2 sections are still too large, or when you need tighter grounding for stories/tests.',
+    tradeoffs: 'More chunks; slightly higher indexing cost.',
+  },
+  {
+    value: 'requirement',
+    label: 'Requirement-aware',
+    summary: 'Split on numbered requirements and shall/must bullet items.',
+    whenToUse:
+      'Enterprise BRDs with REQ-001 / 1.2.3 numbering or explicit shall/must statements.',
+    tradeoffs: 'Weak when the BRD has no numbered requirements or IDs.',
+  },
+  {
+    value: 'fixed_size',
+    label: 'Fixed-size windows',
+    summary: 'Even-sized chunks (~1500 chars) with overlap.',
+    whenToUse:
+      'Unstructured or flat documents with poor headings, pasted specs, or legacy Word exports.',
+    tradeoffs: 'May cut mid-requirement; use only when headings are unreliable.',
+  },
+  {
+    value: 'hybrid',
+    label: 'Hybrid (best quality)',
+    summary: 'Sections → table extraction → semantic split for large sections.',
+    whenToUse:
+      'Production BRDs with tables, long sections, and mixed formatting. Best retrieval quality.',
+    tradeoffs: 'Slowest indexing; uses embedding API during parse/reparse.',
+  },
+]
+
+/** @deprecated use CHUNK_STRATEGY_OPTIONS */
+export const CHUNK_LEVEL_OPTIONS = CHUNK_STRATEGY_OPTIONS.map(({ value, label }) => ({
+  value,
+  label,
+}))
+
+export function getChunkStrategyGuide(value) {
+  return CHUNK_STRATEGY_OPTIONS.find((opt) => opt.value === value) ?? CHUNK_STRATEGY_OPTIONS[0]
 }
 
 export const FEATURE_COUNT_OPTIONS = [
@@ -71,5 +127,6 @@ export function hydratePipelineSettings(raw) {
     personas: raw?.personas ?? '',
     export_project_key: raw?.export_project_key ?? '',
     export_epic_prefix: raw?.export_epic_prefix ?? '',
+    chunk_level: raw?.chunk_level ?? 'section',
   }
 }

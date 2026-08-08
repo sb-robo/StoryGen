@@ -101,11 +101,18 @@ class OpenAIClient:
         return parsed
 
     async def embed_text(self, text: str) -> list[float]:
+        vectors = await self.embed_texts([text])
+        return vectors[0]
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if self._client is None:
             raise RuntimeError("OPENAI_API_KEY is not configured.")
+        if not texts:
+            return []
 
         response = await self._client.embeddings.create(
             model=self.embedding_model,
-            input=text,
+            input=texts,
         )
-        return response.data[0].embedding
+        ordered = sorted(response.data, key=lambda item: item.index)
+        return [item.embedding for item in ordered]

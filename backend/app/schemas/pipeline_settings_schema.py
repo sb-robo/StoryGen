@@ -37,6 +37,69 @@ class TestDepth(StrEnum):
     THOROUGH = "thorough"
 
 
+class BrdChunkStrategy(StrEnum):
+    """How parsed BRD markdown is split before embedding / retrieval."""
+
+    SECTION = "section"
+    SUBSECTION = "subsection"
+    REQUIREMENT = "requirement"
+    FIXED_SIZE = "fixed_size"
+    HYBRID = "hybrid"
+
+
+# Backward-compatible alias
+BrdChunkLevel = BrdChunkStrategy
+
+
+CHUNK_STRATEGY_GUIDE: dict[BrdChunkStrategy, dict[str, str]] = {
+    BrdChunkStrategy.SECTION: {
+        "label": "Section (H1 + H2)",
+        "summary": "Split on major section headings — recommended default.",
+        "when_to_use": (
+            "Standard BRDs with clear headings. Best for feature extraction and "
+            "first-pass review on most documents."
+        ),
+        "tradeoffs": "Broader chunks; may merge related sub-topics under one section.",
+    },
+    BrdChunkStrategy.SUBSECTION: {
+        "label": "Subsection (H1 + H2 + H3)",
+        "summary": "Finer splits at third-level headings.",
+        "when_to_use": (
+            "Long BRDs where H2 sections are still too large, or when you need tighter "
+            "grounding for stories and test cases."
+        ),
+        "tradeoffs": "More chunks; slightly higher indexing cost.",
+    },
+    BrdChunkStrategy.REQUIREMENT: {
+        "label": "Requirement-aware",
+        "summary": "Split on numbered requirements and shall/must bullet items.",
+        "when_to_use": (
+            "Enterprise BRDs with REQ-001 / 1.2.3 numbering or explicit shall/must "
+            "statements. Best traceability from story → requirement."
+        ),
+        "tradeoffs": "Weak when the BRD has no numbered requirements or IDs.",
+    },
+    BrdChunkStrategy.FIXED_SIZE: {
+        "label": "Fixed-size windows",
+        "summary": "Even-sized chunks (~1500 chars) with overlap.",
+        "when_to_use": (
+            "Unstructured or flat documents with poor headings, pasted specs, or legacy "
+            "Word exports where structure-aware splitting fails."
+        ),
+        "tradeoffs": "May cut mid-requirement; use only when headings are unreliable.",
+    },
+    BrdChunkStrategy.HYBRID: {
+        "label": "Hybrid (best quality)",
+        "summary": "Sections → table extraction → semantic split for large sections.",
+        "when_to_use": (
+            "Production BRDs with tables, long sections, and mixed formatting. Best "
+            "overall retrieval quality when OpenAI embeddings are configured."
+        ),
+        "tradeoffs": "Slowest indexing; uses embedding API during parse/reparse.",
+    },
+}
+
+
 FEATURE_COUNT_GUIDANCE = {
     FeatureCountPreference.AUTO: "Choose a natural count from the BRD; prefer fewer high-quality features over many overlapping ones.",
     FeatureCountPreference.FEWER: "Aim for about 5–8 epic-level features. Merge related capabilities aggressively.",
@@ -100,6 +163,10 @@ class BrdPipelineSettings(BaseModel):
     story_style: StoryStyle = StoryStyle.CLASSIC
     pointing_scale: PointingScale = PointingScale.FIBONACCI
     test_depth: TestDepth = TestDepth.STANDARD
+    chunk_level: BrdChunkStrategy = Field(
+        default=BrdChunkStrategy.SECTION,
+        description="BRD chunking strategy applied on parse/reparse",
+    )
     export_project_key: str | None = Field(default=None, max_length=32)
     export_epic_prefix: str | None = Field(default=None, max_length=64)
 
@@ -127,7 +194,11 @@ def parse_pipeline_settings(raw: object | None) -> BrdPipelineSettings:
     if isinstance(raw, BrdPipelineSettings):
         return raw
     if isinstance(raw, dict):
-        return BrdPipelineSettings.model_validate(raw)
+        data = dict(raw)
+        # Accept legacy key names
+        if "chunk_strategy" in data and "chunk_level" not in data:
+            data["chunk_level"] = data.pop("chunk_strategy")
+        return BrdPipelineSettings.model_validate(data)
     return BrdPipelineSettings()
 
 

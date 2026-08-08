@@ -1,7 +1,7 @@
 from app.ai.nodes import feature_extraction as nodes
 from app.ai.openai_client import OpenAIClient
 from app.ai.states.feature_state import FeatureExtractionOutput
-from app.core.config import settings
+from app.ai.graphs.refinement_loop import RefinementLoop
 
 
 async def run_feature_extraction_graph(
@@ -13,49 +13,54 @@ async def run_feature_extraction_graph(
     operation_id: str | None,
     user_id: int,
     brd_id: int,
+    section_hints: str | None = None,
     max_iterations: int | None = None,
 ) -> FeatureExtractionOutput:
-    """
-    Bounded agentic loop: extract → completeness critique → revise (if needed).
-    """
-    cap = max_iterations if max_iterations is not None else settings.LLM_MAX_ITERATIONS
+    """Bounded agentic loop: extract → completeness critique → revise (if needed)."""
+    loop = RefinementLoop[FeatureExtractionOutput, object](client, max_iterations=max_iterations)
 
-    draft = await nodes.generate_features(
-        client,
-        brd_name=brd_name,
-        brd_content=brd_content,
-        pipeline_context=pipeline_context,
-        operation_id=operation_id,
-        user_id=user_id,
-        brd_id=brd_id,
-        iteration=0,
-    )
-
-    for i in range(cap):
-        critique = await nodes.critique_completeness(
+    async def generate() -> FeatureExtractionOutput:
+        return await nodes.generate_features(
             client,
+            brd_name=brd_name,
+            brd_content=brd_content,
+            pipeline_context=pipeline_context,
+            operation_id=operation_id,
+            user_id=user_id,
+            brd_id=brd_id,
+            iteration=0,
+        )
+
+    async def critique(draft: FeatureExtractionOutput, iteration: int):
+        return await nodes.critique_completeness(
+            client,
+            section_hints=section_hints,
             brd_content=brd_content,
             draft=draft,
             pipeline_context=pipeline_context,
             operation_id=operation_id,
             user_id=user_id,
             brd_id=brd_id,
-            iteration=i + 1,
+            iteration=iteration,
         )
-        if critique.passes:
-            break
 
+    async def revise(draft: FeatureExtractionOutput, critique_result, iteration: int):
         revised = await nodes.revise_features(
             client,
             brd_content=brd_content,
             draft=draft,
-            critique=critique,
+            critique=critique_result,
             pipeline_context=pipeline_context,
             operation_id=operation_id,
             user_id=user_id,
             brd_id=brd_id,
-            iteration=i + 1,
+            iteration=iteration,
         )
-        draft = FeatureExtractionOutput(features=revised.features)
+        return FeatureExtractionOutput(features=revised.features)
 
-    return draft
+    return await loop.run(
+        generate=generate,
+        critique=critique,
+        passes=lambda result: result.passes,
+        revise=revise,
+    )

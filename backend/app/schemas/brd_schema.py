@@ -57,6 +57,10 @@ class BrdResponse(BaseModel):
         default_factory=BrdPipelineSettings,
         description="User guidance that steers AI generation for this BRD",
     )
+    chunk_count: int = Field(
+        default=0,
+        description="Number of indexed markdown chunks (0 until parsed)",
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -58,14 +58,18 @@ async def generate_features(
 async def critique_completeness(
     client: OpenAIClient,
     *,
-    brd_content: str,
     draft: FeatureExtractionOutput,
     pipeline_context: str = "",
     operation_id: str | None,
     user_id: int,
     brd_id: int,
     iteration: int,
+    section_hints: str | None = None,
+    brd_content: str | None = None,
 ) -> FeatureCompletenessCritique:
+    hints = section_hints
+    if hints is None:
+        hints = extract_section_hints(brd_content or "")
     feature_titles = "\n".join(f"- {f.title}" for f in draft.features) or "(empty)"
     return await client.parse_structured(
         messages=[
@@ -73,7 +77,7 @@ async def critique_completeness(
             {
                 "role": "user",
                 "content": prompts.CRITIQUE_USER.format(
-                    section_hints=extract_section_hints(brd_content),
+                    section_hints=hints,
                     feature_titles=feature_titles,
                     pipeline_context=pipeline_context or "(no extra settings)",
                 ),
@@ -100,7 +104,7 @@ async def revise_features(
     brd_id: int,
     iteration: int,
 ) -> FeatureRevisionOutput:
-    excerpt = brd_content[:8000]
+    excerpt = brd_content[:12000]
     current = draft.model_dump_json()
     return await client.parse_structured(
         messages=[
