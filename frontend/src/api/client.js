@@ -68,7 +68,7 @@ async function getValidToken() {
   return null
 }
 
-export async function apiRequest(path, options = {}) {
+async function authorizedFetch(path, options = {}) {
   const { auth = true, body, headers = {}, ...rest } = options
   const url = resolveUrl(path)
   const requestHeaders = { ...headers }
@@ -109,6 +109,12 @@ export async function apiRequest(path, options = {}) {
     }
   }
 
+  return response
+}
+
+export async function apiRequest(path, options = {}) {
+  const response = await authorizedFetch(path, options)
+
   if (response.status === 204) return null
 
   const data = await response.json().catch(() => null)
@@ -120,6 +126,30 @@ export async function apiRequest(path, options = {}) {
     )
   }
   return data
+}
+
+/** Fetch a binary/file response (e.g. CSV export). Returns { blob, filename }. */
+export async function apiDownload(path, options = {}) {
+  const response = await authorizedFetch(path, options)
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    throw new ApiError(
+      formatDetail(data?.detail) || response.statusText,
+      response.status,
+      data?.detail,
+    )
+  }
+
+  const disposition = response.headers.get('content-disposition') || ''
+  const match = disposition.match(/filename="?([^"]+)"?/i)
+  const filename = match?.[1] || 'download'
+  const blob = await response.blob()
+  return { blob, filename }
+}
+
+/** Low-level authenticated fetch for streams (SSE) and non-JSON bodies. */
+export function apiFetch(path, options = {}) {
+  return authorizedFetch(path, options)
 }
 
 export const api = {

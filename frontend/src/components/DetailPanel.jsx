@@ -4,6 +4,8 @@ import * as subFeatureApi from '../api/subFeatures'
 import * as storyApi from '../api/stories'
 import * as testCaseApi from '../api/testCases'
 import { ITEM_TYPES } from '../utils/pipeline'
+import { buildAncestorPath, nodeToItem } from '../utils/lineage'
+import { Breadcrumb } from './Breadcrumb'
 import { ClarifyingAnswersForm } from './ClarifyingAnswersForm'
 import { EditModal } from './EditModal'
 import { ReviewActions } from './ReviewCard'
@@ -11,19 +13,32 @@ import { StatusBadge } from './StatusBadge'
 import { StoryDetailTabs } from './StoryDetailTabs'
 import { SubFeatureTile } from './SubFeatureTile'
 
-export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRunJob }) {
+export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRunJob, parents, wide }) {
   const [editItem, setEditItem] = useState(null)
   const [showRationale, setShowRationale] = useState(false)
+  const [childCount, setChildCount] = useState(null)
+  const itemKey = item ? `${item.type}:${item.id}` : null
+  const [trackedItemKey, setTrackedItemKey] = useState(itemKey)
+  const rootClassName = `detail-panel ${wide ? 'detail-panel-wide' : ''}`
+
+  // Reset the fetched child count (sub-features/stories) whenever the selected
+  // item changes, so a stale count from a previous selection can't leak in.
+  if (trackedItemKey !== itemKey) {
+    setTrackedItemKey(itemKey)
+    setChildCount(null)
+  }
 
   if (!item) {
     return (
-      <aside className="detail-panel detail-panel-empty">
-        <p className="empty-hint">Select an item from the review queue to see details.</p>
+      <aside className={`${rootClassName} detail-panel-empty`}>
+        <p className="empty-hint">Select an item from the review queue or structure tree to see details.</p>
       </aside>
     )
   }
 
   const entity = item.entity
+  const breadcrumbPath = parents ? buildAncestorPath(item, parents) : []
+  const parentNode = breadcrumbPath.length > 1 ? breadcrumbPath[breadcrumbPath.length - 2] : null
 
   async function handleReview(action) {
     switch (item.type) {
@@ -63,12 +78,24 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
       : entity.status === 'pending_review'
 
   const nextHint = getNextHint(item.type, entity)
-  const nextAction = getNextAction(item.type, entity)
+  const nextAction = getNextAction(item.type, entity, childCount)
 
   return (
-    <aside className="detail-panel">
+    <aside className={rootClassName}>
       <div className="detail-panel-header">
         <div>
+          <div className="detail-panel-nav">
+            {parentNode && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm detail-back-btn"
+                onClick={() => onSelectItem?.(nodeToItem(parentNode))}
+              >
+                ← Back
+              </button>
+            )}
+            <Breadcrumb path={breadcrumbPath} onNavigate={onSelectItem} />
+          </div>
           <h3>{entity.title}</h3>
           <div className="feature-detail-meta">
             <StatusBadge status={item.type === ITEM_TYPES.POINTS ? entity.points_status : entity.status} />
@@ -102,6 +129,7 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
             onRefresh={onRefresh}
             busy={busy}
             onRunJob={onRunJob}
+            onChildCountChange={setChildCount}
             onSelectSubFeature={(sf) =>
               onSelectItem?.({
                 id: sf.id,
@@ -124,6 +152,7 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
             onRefresh={onRefresh}
             busy={busy}
             onRunJob={onRunJob}
+            onChildCountChange={setChildCount}
             onSelectStory={(story) =>
               onSelectItem?.({
                 id: story.id,
@@ -244,14 +273,15 @@ export function DetailPanel({ item, busy, onClose, onRefresh, onSelectItem, onRu
   )
 }
 
-function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRefresh, busy, onRunJob, onSelectSubFeature }) {
+function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRefresh, busy, onRunJob, onSelectSubFeature, onChildCountChange }) {
   const [subFeatures, setSubFeatures] = useState([])
   const [generating, setGenerating] = useState(false)
 
   const load = useCallback(async () => {
     const res = await featureApi.listSubFeatures(feature.id)
     setSubFeatures(res.items)
-  }, [feature.id])
+    onChildCountChange?.(res.items.length)
+  }, [feature.id, onChildCountChange])
 
   useEffect(() => {
     load()
@@ -329,14 +359,15 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
   )
 }
 
-function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale, onRefresh, busy, onRunJob, onSelectStory }) {
+function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale, busy, onRunJob, onSelectStory, onChildCountChange }) {
   const [stories, setStories] = useState([])
   const [generating, setGenerating] = useState(false)
 
   const load = useCallback(async () => {
     const res = await subFeatureApi.listStories(subFeature.id)
     setStories(res.items)
-  }, [subFeature.id])
+    onChildCountChange?.(res.items.length)
+  }, [subFeature.id, onChildCountChange])
 
   useEffect(() => {
     load()
@@ -460,20 +491,21 @@ function getNextHint(type, entity) {
   }
 }
 
-function getNextAction(type, entity) {
+function getNextAction(type, entity, childCount) {
+  const hasChildren = childCount > 0
   switch (type) {
     case ITEM_TYPES.FEATURE:
       if (entity.status !== 'approved') return null
       return {
-        buttonLabel: 'Generate sub-features',
-        label: `Generate sub-features: ${entity.title}`,
+        buttonLabel: hasChildren ? 'Regenerate sub-features' : 'Generate sub-features',
+        label: `${hasChildren ? 'Regenerate' : 'Generate'} sub-features: ${entity.title}`,
         run: () => featureApi.generateSubFeatures(entity.id),
       }
     case ITEM_TYPES.SUB_FEATURE:
       if (entity.status !== 'approved') return null
       return {
-        buttonLabel: 'Generate stories',
-        label: `Generate stories: ${entity.title}`,
+        buttonLabel: hasChildren ? 'Regenerate stories' : 'Generate stories',
+        label: `${hasChildren ? 'Regenerate' : 'Generate'} stories: ${entity.title}`,
         run: () => subFeatureApi.generateStories(entity.id),
       }
     default:

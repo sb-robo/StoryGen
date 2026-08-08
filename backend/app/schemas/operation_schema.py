@@ -39,6 +39,10 @@ class OperationResponse(BaseModel):
     operation_id: str = Field(description="Poll this id for status and result")
     operation_type: str
     status: str
+    user_id: int | None = Field(
+        default=None,
+        description="Owning user id (included on admin list responses)",
+    )
     resource_type: str | None = None
     resource_id: int | None = Field(default=None, description="BRD id once the upload row exists")
     error_message: str | None = None
@@ -90,6 +94,7 @@ class OperationListResponse(BaseModel):
     operation_type: str | None = None
     resource_type: str | None = None
     resource_id: int | None = None
+    user_id: int | None = None
     sort_by: str
     sort_order: str
 
@@ -107,6 +112,7 @@ class OperationListResponse(BaseModel):
         resource_id: int | None,
         sort_by: str,
         sort_order: str,
+        user_id: int | None = None,
     ) -> "OperationListResponse":
         total_pages = ceil(total / page_size) if page_size else 0
         return cls(
@@ -121,6 +127,7 @@ class OperationListResponse(BaseModel):
             operation_type=operation_type,
             resource_type=resource_type,
             resource_id=resource_id,
+            user_id=user_id,
             sort_by=sort_by,
             sort_order=sort_order,
         )

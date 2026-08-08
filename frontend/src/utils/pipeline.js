@@ -5,6 +5,7 @@ export const PIPELINE_STAGES = [
   { id: 'stories', label: 'Stories' },
   { id: 'points', label: 'Points' },
   { id: 'tests', label: 'Tests' },
+  { id: 'export', label: 'Export' },
 ]
 
 export const ITEM_TYPES = {
@@ -119,6 +120,13 @@ export function computePipelineState({ brdStatus, features, subFeatures, stories
       pending: testCaseCounts.pending_review,
       lockReason: storyCounts.approved === 0 ? 'Approve stories first' : null,
     },
+    export: {
+      id: 'export',
+      status: storyCounts.approved === 0 ? 'locked' : 'ready',
+      counts: { total: storyCounts.approved, approved: storyCounts.approved },
+      pending: 0,
+      lockReason: storyCounts.approved === 0 ? 'Approve at least one story first' : null,
+    },
   }
 
   return { stages, featureCounts, subFeatureCounts, storyCounts, testCaseCounts, pointsCounts }
@@ -126,7 +134,7 @@ export function computePipelineState({ brdStatus, features, subFeatures, stories
 
 export function buildReviewQueue({ features, subFeatures, stories, testCases, parents }) {
   const queue = []
-  const { featureById, subFeatureById } = parents
+  const { featureById, subFeatureById, storyById } = parents
 
   for (const feature of features) {
     if (feature.status === 'pending_review') {
@@ -135,6 +143,7 @@ export function buildReviewQueue({ features, subFeatures, stories, testCases, pa
         type: ITEM_TYPES.FEATURE,
         title: feature.title,
         parentLabel: '—',
+        pathLabel: null,
         confidence: feature.confidence,
         status: feature.status,
         entity: feature,
@@ -150,6 +159,7 @@ export function buildReviewQueue({ features, subFeatures, stories, testCases, pa
         type: ITEM_TYPES.SUB_FEATURE,
         title: sf.title,
         parentLabel: parent?.title ?? 'Feature',
+        pathLabel: parent?.title ?? null,
         confidence: sf.confidence,
         status: sf.status,
         entity: sf,
@@ -158,25 +168,29 @@ export function buildReviewQueue({ features, subFeatures, stories, testCases, pa
   }
 
   for (const story of stories) {
+    const subFeature = subFeatureById[story.sub_feature_id]
+    const feature = subFeature ? featureById[subFeature.feature_id] : null
+    const storyPath = [feature?.title, subFeature?.title].filter(Boolean).join(' › ')
+
     if (story.status === 'pending_review') {
-      const parent = subFeatureById[story.sub_feature_id]
       queue.push({
         id: story.id,
         type: ITEM_TYPES.STORY,
         title: story.title,
-        parentLabel: parent?.title ?? 'Sub-feature',
+        parentLabel: subFeature?.title ?? 'Sub-feature',
+        pathLabel: storyPath || null,
         confidence: story.confidence,
         status: story.status,
         entity: story,
       })
     }
     if (story.points_status === 'pending_review') {
-      const parent = subFeatureById[story.sub_feature_id]
       queue.push({
         id: `points-${story.id}`,
         type: ITEM_TYPES.POINTS,
         title: `${story.title} (points)`,
-        parentLabel: parent?.title ?? 'Sub-feature',
+        parentLabel: subFeature?.title ?? 'Sub-feature',
+        pathLabel: storyPath || null,
         confidence: null,
         status: story.points_status,
         entity: story,
@@ -186,11 +200,17 @@ export function buildReviewQueue({ features, subFeatures, stories, testCases, pa
 
   for (const tc of testCases) {
     if (tc.status === 'pending_review') {
+      const story = storyById[tc.story_id]
+      const subFeature = story ? subFeatureById[story.sub_feature_id] : null
+      const feature = subFeature ? featureById[subFeature.feature_id] : null
+      const tcPath = [feature?.title, subFeature?.title, story?.title].filter(Boolean).join(' › ')
+
       queue.push({
         id: tc.id,
         type: ITEM_TYPES.TEST_CASE,
         title: tc.title,
-        parentLabel: parents.storyById[tc.story_id]?.title ?? 'Story',
+        parentLabel: story?.title ?? 'Story',
+        pathLabel: tcPath || null,
         confidence: tc.confidence,
         status: tc.status,
         entity: tc,
@@ -314,7 +334,15 @@ export function getSuggestedStep({ brdStatus, pipeline, reviewQueue }) {
     return { label: 'Generate test cases for approved stories', action: 'batch_tests', stageId: 'tests' }
   }
 
-  return { label: 'Pipeline complete — ready for export', action: null, stageId: 'tests' }
+  if (stages.export.status !== 'locked') {
+    return {
+      label: 'Export approved stories as CSV',
+      action: 'export_csv',
+      stageId: 'export',
+    }
+  }
+
+  return { label: 'Pipeline complete — ready for export', action: null, stageId: 'export' }
 }
 
 function stageForQueueItem(type) {
@@ -375,6 +403,19 @@ export function getBatchActions({ pipeline, features, subFeatures, stories }) {
     actions.push({
       id: 'batch_tests',
       label: 'Generate test cases',
+      count: approvedStories.length,
+    })
+  }
+
+  if (approvedStories.length > 0 && stages.export?.status !== 'locked') {
+    actions.push({
+      id: 'export_csv',
+      label: 'Export CSV',
+      count: approvedStories.length,
+    })
+    actions.push({
+      id: 'export_jira',
+      label: 'Export Jira CSV',
       count: approvedStories.length,
     })
   }

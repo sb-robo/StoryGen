@@ -5,6 +5,7 @@ function StepIndicator({ status, pending }) {
   if (status === 'failed') return <span className="step-icon step-failed">✕</span>
   if (status === 'running' || status === 'in_progress') return <span className="step-icon step-progress">◐</span>
   if (status === 'needs_review') return <span className="step-icon step-review">{pending}</span>
+  if (status === 'ready') return <span className="step-icon step-ready">↓</span>
   if (status === 'locked') return <span className="step-icon step-locked">○</span>
   return <span className="step-icon step-empty">○</span>
 }
@@ -12,8 +13,9 @@ function StepIndicator({ status, pending }) {
 function stepLabel(stage, stageData) {
   if (stageData.status === 'needs_review') return `${stage.label} (${stageData.pending})`
   if (stageData.status === 'complete') return `${stage.label} ✓`
+  if (stageData.status === 'ready') return stage.label
   if (stageData.status === 'locked') return stage.label
-  if (stageData.counts?.total > 0) {
+  if (stageData.counts?.total > 0 && stage.id !== 'export') {
     return `${stage.label} (${stageData.counts.approved}/${stageData.counts.total})`
   }
   return stage.label
@@ -36,6 +38,7 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
             (stageData.status === 'not_started' ||
               stageData.status === 'needs_review' ||
               stageData.status === 'in_progress' ||
+              stageData.status === 'ready' ||
               showRegenerateFeatures)
 
           let ctaLabel = null
@@ -49,6 +52,7 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
           else if (stage.id === 'points' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending} points`
           else if (stage.id === 'tests' && stageData.counts?.total === 0) ctaLabel = 'Generate test cases'
           else if (stage.id === 'tests' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
+          else if (stage.id === 'export') ctaLabel = 'Export CSV'
 
           return (
             <li key={stage.id} className="stepper-item">

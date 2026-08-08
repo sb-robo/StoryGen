@@ -37,11 +37,14 @@ class OperationService:
         self.story_points_service = StoryPointsService(db)
         self.test_case_service = TestCaseService(db)
 
-    def _to_response(self, operation: AsyncOperation) -> OperationResponse:
+    def _to_response(
+        self, operation: AsyncOperation, *, include_user_id: bool = False
+    ) -> OperationResponse:
         return OperationResponse(
             operation_id=operation.id,
             operation_type=operation.operation_type,
             status=operation.status,
+            user_id=operation.user_id if include_user_id else None,
             resource_type=operation.resource_type,
             resource_id=operation.resource_id,
             error_message=operation.error_message,
@@ -50,9 +53,8 @@ class OperationService:
             completed_at=operation.completed_at,
         )
 
-    async def list_operations(
+    async def list_operations_admin(
         self,
-        user_id: int,
         *,
         page: int = 1,
         page_size: int = 20,
@@ -60,11 +62,13 @@ class OperationService:
         operation_type: str | None = None,
         resource_type: str | None = None,
         resource_id: int | None = None,
+        user_id: int | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
     ) -> OperationListResponse:
+        """Admin list across all users (optional filter by owning user_id)."""
         if created_from and created_to and created_from > created_to:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -80,17 +84,17 @@ class OperationService:
             "created_from": created_from,
             "created_to": created_to,
         }
-        items = await self.repo.list_for_user(
-            user_id,
+        items = await self.repo.list_operations(
+            user_id=user_id,
             offset=offset,
             limit=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
             **filters,
         )
-        total = await self.repo.count_for_user(user_id, **filters)
+        total = await self.repo.count_operations(user_id=user_id, **filters)
         return OperationListResponse.build(
-            items=[self._to_response(item) for item in items],
+            items=[self._to_response(item, include_user_id=True) for item in items],
             total=total,
             page=page,
             page_size=page_size,
@@ -98,6 +102,7 @@ class OperationService:
             operation_type=operation_type,
             resource_type=resource_type,
             resource_id=resource_id,
+            user_id=user_id,
             sort_by=sort_by,
             sort_order=sort_order,
         )

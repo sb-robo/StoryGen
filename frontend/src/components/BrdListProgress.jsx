@@ -1,6 +1,23 @@
 import { useEffect, useState } from 'react'
-import { computePipelineState, getProgressLabel, getTotalPending } from '../utils/pipeline'
-import { loadFullPipeline } from '../utils/loadPipeline'
+import { getPipelineSummary } from '../api/brds'
+
+function formatProgress(stages) {
+  if (!stages) return null
+  const parts = []
+  const features = stages.features?.counts
+  const stories = stages.stories?.counts
+  const tests = stages.tests?.counts
+  if (features?.total > 0) {
+    parts.push(`Features ${Math.round((features.approved / features.total) * 100)}%`)
+  }
+  if (stories?.total > 0) {
+    parts.push(`Stories ${Math.round((stories.approved / stories.total) * 100)}%`)
+  }
+  if (tests?.total > 0) {
+    parts.push(`Tests ${Math.round((tests.approved / tests.total) * 100)}%`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
+}
 
 export function BrdListProgress({ brdId, brdStatus }) {
   const [progress, setProgress] = useState(null)
@@ -15,18 +32,11 @@ export function BrdListProgress({ brdId, brdStatus }) {
 
     let cancelled = false
 
-    loadFullPipeline(brdId)
-      .then((data) => {
+    getPipelineSummary(brdId)
+      .then((summary) => {
         if (cancelled) return
-        const pipeline = computePipelineState({
-          brdStatus,
-          features: data.features,
-          subFeatures: data.subFeatures,
-          stories: data.stories,
-          testCases: data.testCases,
-        })
-        setProgress(getProgressLabel(pipeline))
-        setPending(getTotalPending(pipeline))
+        setProgress(formatProgress(summary.stages))
+        setPending(summary.totals?.pending_review ?? 0)
       })
       .catch(() => {
         if (!cancelled) {

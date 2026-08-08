@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -9,10 +11,19 @@ from fastapi import (
     status,
 )
 from datetime import datetime
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
-from app.core.dependencies import get_brd_service, get_current_user, get_feature_service, get_operation_service
+from app.core.dependencies import (
+    get_batch_service,
+    get_brd_service,
+    get_current_user,
+    get_export_service,
+    get_feature_service,
+    get_operation_service,
+    get_pipeline_service,
+)
 from app.db.models.user import User
+from app.schemas.batch_schema import BatchOperationResponse
 from app.schemas.brd_schema import (
     BrdContentResponse,
     BrdDeleteResponse,
@@ -27,11 +38,21 @@ from app.schemas.brd_schema import (
 )
 from app.schemas.operation_schema import OperationResponse, OperationResultResponse
 from app.schemas.feature_schema import FeatureListResponse, FeatureStatusFilter
+from app.schemas.pipeline_schema import PipelineSummaryResponse
 from app.services.ai import FeatureService
-from app.services.ai.tasks import run_feature_extraction_task
+from app.services.ai.batch_service import BatchService
+from app.services.ai.tasks import (
+    run_feature_extraction_task,
+    run_story_generation_task,
+    run_story_point_estimation_task,
+    run_sub_feature_generation_task,
+    run_test_case_generation_task,
+)
 from app.services.brd import BrdService
 from app.services.brd.tasks import run_brd_parse_task
+from app.services.export import ExportService
 from app.services.operations import OperationService
+from app.services.pipeline import PipelineService
 from app.utils.operation_urls import BRD_OPERATION_TYPES
 
 router = APIRouter()
@@ -305,6 +326,140 @@ async def download_brd(
         current_user.id, brd_id
     )
     return FileResponse(path, filename=filename, media_type=mime_type)
+
+
+@router.get(
+    "/{brd_id}/pipeline-summary",
+    response_model=PipelineSummaryResponse,
+    summary="Pipeline stage summary for a BRD",
+    description=(
+        "Aggregated stage counts, blockers, and suggested next step. "
+        "Useful for BRD list cards and overview without loading the full tree."
+    ),
+)
+async def get_pipeline_summary(
+    brd_id: int,
+    current_user: User = Depends(get_current_user),
+    pipeline_service: PipelineService = Depends(get_pipeline_service),
+) -> PipelineSummaryResponse:
+    return await pipeline_service.get_summary(current_user.id, brd_id)
+
+
+@router.post(
+    "/{brd_id}/export",
+    summary="Export approved stories and test cases",
+    description=(
+        "Deterministic export of approved pipeline output. "
+        "`format=csv` — StoryGen CSV. "
+        "`format=jira` — Jira CSV importer file (one Story row per approved story)."
+    ),
+    responses={
+        200: {
+            "content": {"text/csv": {}},
+            "description": "CSV download of approved stories (+ approved test cases)",
+        },
+        409: {"description": "No approved stories to export"},
+    },
+)
+async def export_brd(
+    brd_id: int,
+    format: Literal["csv", "jira"] = Query(
+        "csv",
+        description="Export format: `csv` (StoryGen) or `jira` (Jira import CSV).",
+    ),
+    current_user: User = Depends(get_current_user),
+    export_service: ExportService = Depends(get_export_service),
+) -> Response:
+    export_file = await export_service.export_brd(
+        current_user.id, brd_id, format=format
+    )
+    return Response(
+        content=export_file.content,
+        media_type=export_file.media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{export_file.filename}"'
+        },
+    )
+
+
+@router.post(
+    "/{brd_id}/sub-features/generate-all",
+    response_model=BatchOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Generate sub-features for all approved features",
+)
+async def generate_all_sub_features(
+    brd_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    batch_service: BatchService = Depends(get_batch_service),
+) -> BatchOperationResponse:
+    batch, operation_ids = await batch_service.enqueue_sub_features_all(
+        current_user.id, brd_id
+    )
+    for operation_id in operation_ids:
+        background_tasks.add_task(run_sub_feature_generation_task, operation_id)
+    return batch
+
+
+@router.post(
+    "/{brd_id}/stories/generate-all",
+    response_model=BatchOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Generate stories for all approved sub-features",
+)
+async def generate_all_stories(
+    brd_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    batch_service: BatchService = Depends(get_batch_service),
+) -> BatchOperationResponse:
+    batch, operation_ids = await batch_service.enqueue_stories_all(
+        current_user.id, brd_id
+    )
+    for operation_id in operation_ids:
+        background_tasks.add_task(run_story_generation_task, operation_id)
+    return batch
+
+
+@router.post(
+    "/{brd_id}/points/estimate-all",
+    response_model=BatchOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Estimate story points for all approved stories needing points",
+)
+async def estimate_all_points(
+    brd_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    batch_service: BatchService = Depends(get_batch_service),
+) -> BatchOperationResponse:
+    batch, operation_ids = await batch_service.enqueue_points_all(
+        current_user.id, brd_id
+    )
+    for operation_id in operation_ids:
+        background_tasks.add_task(run_story_point_estimation_task, operation_id)
+    return batch
+
+
+@router.post(
+    "/{brd_id}/test-cases/generate-all",
+    response_model=BatchOperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Generate test cases for all approved stories",
+)
+async def generate_all_test_cases(
+    brd_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    batch_service: BatchService = Depends(get_batch_service),
+) -> BatchOperationResponse:
+    batch, operation_ids = await batch_service.enqueue_test_cases_all(
+        current_user.id, brd_id
+    )
+    for operation_id in operation_ids:
+        background_tasks.add_task(run_test_case_generation_task, operation_id)
+    return batch
 
 
 @router.post(

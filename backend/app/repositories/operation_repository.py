@@ -35,16 +35,20 @@ class OperationRepository:
 
     def _filtered_query(
         self,
-        user_id: int,
         *,
+        user_id: int | None = None,
         status: str | None = None,
         operation_type: str | None = None,
         resource_type: str | None = None,
         resource_id: int | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
+        updated_since: datetime | None = None,
+        operation_ids: list[str] | None = None,
     ) -> Select:
-        query = select(AsyncOperation).where(AsyncOperation.user_id == user_id)
+        query = select(AsyncOperation)
+        if user_id is not None:
+            query = query.where(AsyncOperation.user_id == user_id)
         if status:
             query = query.where(AsyncOperation.status == status)
         if operation_type:
@@ -57,12 +61,16 @@ class OperationRepository:
             query = query.where(AsyncOperation.created_at >= created_from)
         if created_to is not None:
             query = query.where(AsyncOperation.created_at <= created_to)
+        if updated_since is not None:
+            query = query.where(AsyncOperation.updated_at > updated_since)
+        if operation_ids:
+            query = query.where(AsyncOperation.id.in_(operation_ids))
         return query
 
-    async def list_for_user(
+    async def list_operations(
         self,
-        user_id: int,
         *,
+        user_id: int | None = None,
         offset: int,
         limit: int,
         status: str | None = None,
@@ -75,7 +83,7 @@ class OperationRepository:
         sort_order: str = "desc",
     ) -> list[AsyncOperation]:
         query = self._filtered_query(
-            user_id,
+            user_id=user_id,
             status=status,
             operation_type=operation_type,
             resource_type=resource_type,
@@ -100,10 +108,39 @@ class OperationRepository:
         )
         return list(result.scalars().all())
 
-    async def count_for_user(
+    async def list_for_user(
         self,
         user_id: int,
         *,
+        offset: int,
+        limit: int,
+        status: str | None = None,
+        operation_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> list[AsyncOperation]:
+        return await self.list_operations(
+            user_id=user_id,
+            offset=offset,
+            limit=limit,
+            status=status,
+            operation_type=operation_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            created_from=created_from,
+            created_to=created_to,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+    async def count_operations(
+        self,
+        *,
+        user_id: int | None = None,
         status: str | None = None,
         operation_type: str | None = None,
         resource_type: str | None = None,
@@ -112,7 +149,7 @@ class OperationRepository:
         created_to: datetime | None = None,
     ) -> int:
         base = self._filtered_query(
-            user_id,
+            user_id=user_id,
             status=status,
             operation_type=operation_type,
             resource_type=resource_type,
@@ -124,6 +161,51 @@ class OperationRepository:
             select(func.count()).select_from(base.subquery())
         )
         return result.scalar_one()
+
+    async def count_for_user(
+        self,
+        user_id: int,
+        *,
+        status: str | None = None,
+        operation_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+    ) -> int:
+        return await self.count_operations(
+            user_id=user_id,
+            status=status,
+            operation_type=operation_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            created_from=created_from,
+            created_to=created_to,
+        )
+
+    async def list_updated_since(
+        self,
+        *,
+        user_id: int,
+        updated_since: datetime | None = None,
+        resource_type: str | None = None,
+        resource_id: int | None = None,
+        operation_ids: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[AsyncOperation]:
+        query = self._filtered_query(
+            user_id=user_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            updated_since=updated_since,
+            operation_ids=operation_ids,
+        )
+        result = await self.db.execute(
+            query.order_by(AsyncOperation.updated_at.asc(), AsyncOperation.id.asc()).limit(
+                limit
+            )
+        )
+        return list(result.scalars().all())
 
     async def mark_running(self, operation: AsyncOperation) -> AsyncOperation:
         operation.status = OperationStatus.RUNNING.value

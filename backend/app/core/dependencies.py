@@ -16,8 +16,11 @@ from app.services.ai import (
     SubFeatureService,
     TestCaseService,
 )
+from app.services.ai.batch_service import BatchService
 from app.services.brd import BrdService
+from app.services.export import ExportService
 from app.services.operations import OperationService
+from app.services.pipeline import PipelineService
 from app.services.user_service import UserService
 from app.utils.jwt_handler import decode_token
 
@@ -45,6 +48,18 @@ def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
 
 def get_brd_service(db: AsyncSession = Depends(get_db)) -> BrdService:
     return BrdService(db)
+
+
+def get_export_service(db: AsyncSession = Depends(get_db)) -> ExportService:
+    return ExportService(db)
+
+
+def get_pipeline_service(db: AsyncSession = Depends(get_db)) -> PipelineService:
+    return PipelineService(db)
+
+
+def get_batch_service(db: AsyncSession = Depends(get_db)) -> BatchService:
+    return BatchService(db)
 
 
 def get_operation_service(db: AsyncSession = Depends(get_db)) -> OperationService:

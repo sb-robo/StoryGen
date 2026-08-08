@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useState } from 'react'
 import { api } from '../api/client'
 import { resolveUrl } from '../api/config'
-import { pollOperation } from '../hooks/useOperationPoll'
+import { watchOperation } from '../hooks/useOperationPoll'
 
 const JobsContext = createContext(null)
 
@@ -52,7 +52,7 @@ export function JobsProvider({ children }) {
       setJobs((prev) => [job, ...prev])
 
       try {
-        const finalStatus = await pollOperation(op.status_url, {
+        const finalStatus = await watchOperation(op.operation_id, op.status_url, {
           onUpdate: (status) => {
             updateJob(jobId, {
               status: status.done ? (status.status === 'failed' ? 'failed' : 'succeeded') : 'running',
