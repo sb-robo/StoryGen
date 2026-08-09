@@ -753,7 +753,11 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
               </>
             )}
 
-            <div className={`workspace-main ${detailInMiddle && !isNarrow ? 'workspace-main-compact' : ''}`}>
+            <div
+              className={`workspace-main ${detailInMiddle && !isNarrow ? 'workspace-main-compact' : ''} ${
+                !selectedItem && !isNarrow ? 'workspace-main-solo' : ''
+              }`}
+            >
               {workspaceTab === 'overview' && (
                 <OverviewTab
                   brdId={brd.id}

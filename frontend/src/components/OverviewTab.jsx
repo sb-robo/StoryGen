@@ -69,47 +69,55 @@ export function OverviewTab({
     <section className="overview-tab">
       <div className="overview-stack">
         <div className="overview-section overview-next">
-          <h2>Suggested next step</h2>
+          <div className="panel-header-row">
+            <h2>Suggested next step</h2>
+            {suggestedStep?.action && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => onSuggestedAction(suggestedStep)}
+                disabled={busy}
+              >
+                {suggestedStep.label}
+              </button>
+            )}
+          </div>
           <p className="overview-suggestion">{suggestedStep?.label ?? 'Loading…'}</p>
-          {suggestedStep?.action && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onSuggestedAction(suggestedStep)}
-              disabled={busy}
-            >
-              {suggestedStep.label}
-            </button>
-          )}
         </div>
 
         {exportReady && exportReadiness && (
           <div className="overview-section overview-export-ready">
-            <h3>Export readiness</h3>
+            <div className="panel-header-row">
+              <h3>Export readiness</h3>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => onSuggestedAction?.({ action: 'export_csv', label: 'Export' })}
+                disabled={busy || exportReadiness.approvedStories <= 0}
+              >
+                Export…
+              </button>
+            </div>
             <p className="overview-suggestion">{exportReadinessLabel(exportReadiness)}</p>
             <p className="meta">
               Only approved stories and approved test cases are included. Pending review items are skipped.
             </p>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onSuggestedAction?.({ action: 'export_csv', label: 'Export' })}
-              disabled={busy || exportReadiness.approvedStories <= 0}
-            >
-              Export…
-            </button>
           </div>
         )}
 
         <div className="overview-section overview-attention">
-          <h2>Needs your attention</h2>
-          {reviewQueue.length > 0 ? (
-            <>
-              <p className="overview-count">{reviewQueue.length} item{reviewQueue.length !== 1 ? 's' : ''} pending review</p>
-              <button type="button" className="btn btn-primary" onClick={onGoToQueue} disabled={busy}>
+          <div className="panel-header-row">
+            <h2>Needs your attention</h2>
+            {reviewQueue.length > 0 && (
+              <button type="button" className="btn btn-primary btn-sm" onClick={onGoToQueue} disabled={busy}>
                 Open review queue
               </button>
-            </>
+            )}
+          </div>
+          {reviewQueue.length > 0 ? (
+            <p className="overview-count">
+              {reviewQueue.length} item{reviewQueue.length !== 1 ? 's' : ''} pending review
+            </p>
           ) : (
             <p className="empty-hint">All caught up — nothing pending review.</p>
           )}

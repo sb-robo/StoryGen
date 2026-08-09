@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import * as authApi from '../api/auth'
+import { ThemeToggle } from '../theme/ThemeToggle'
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -35,6 +36,7 @@ export function ResetPasswordPage() {
 
   return (
     <div className="auth-page">
+      <ThemeToggle className="theme-toggle-corner" />
       <div className="auth-card">
         <h1>Reset password</h1>
         <p className="auth-subtitle">Choose a new password for your account</p>

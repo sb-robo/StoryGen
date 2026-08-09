@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as authApi from '../api/auth'
+import { ThemeToggle } from '../theme/ThemeToggle'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -28,6 +29,7 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="auth-page">
+      <ThemeToggle className="theme-toggle-corner" />
       <div className="auth-card">
         <h1>Forgot password</h1>
         <p className="auth-subtitle">

@@ -11,6 +11,22 @@
       rel="stylesheet"
     />
     <title>StoryGen</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('storygen-theme')
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+          document.documentElement.setAttribute('data-theme', theme)
+        } catch (e) {
+          /* localStorage unavailable — default light styles still apply */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { ThemeToggle } from '../theme/ThemeToggle'
 
 export function RegisterPage() {
   const { register } = useAuth()
@@ -32,6 +33,7 @@ export function RegisterPage() {
 
   return (
     <div className="auth-page">
+      <ThemeToggle className="theme-toggle-corner" />
       <div className="auth-card">
         <h1>Create account</h1>
         <p className="auth-subtitle">First user becomes admin automatically</p>

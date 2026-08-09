@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { ThemeToggle } from '../theme/ThemeToggle'
 
 export function LoginPage() {
   const { login } = useAuth()
@@ -29,6 +30,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-page">
+      <ThemeToggle className="theme-toggle-corner" />
       <div className="auth-card">
         <h1>Sign in</h1>
         <p className="auth-subtitle">Review BRDs and AI-generated stories</p>
