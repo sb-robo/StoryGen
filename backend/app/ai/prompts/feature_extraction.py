@@ -63,7 +63,7 @@ CRITIQUE_USER = """BRD section headings / structure hints:
 
 {existing_constraints}
 
-Extracted features (titles only):
+Extracted features (title, description, rationale):
 {feature_titles}
 
 Does the feature list adequately and cleanly cover the BRD?

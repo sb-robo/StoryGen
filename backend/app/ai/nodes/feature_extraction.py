@@ -56,6 +56,7 @@ async def generate_features(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.4,
     )
 
 
@@ -75,7 +76,13 @@ async def critique_completeness(
     hints = section_hints
     if hints is None:
         hints = extract_section_hints(brd_content or "")
-    feature_titles = "\n".join(f"- {f.title}" for f in draft.features) or "(empty)"
+    feature_titles = (
+        "\n".join(
+            f"- {f.title}: {f.description}\n  Rationale: {f.rationale}"
+            for f in draft.features
+        )
+        or "(empty)"
+    )
     return await client.parse_structured(
         messages=[
             {"role": "system", "content": prompts.CRITIQUE_SYSTEM},
@@ -96,6 +103,7 @@ async def critique_completeness(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.2,
     )
 
 
@@ -136,6 +144,7 @@ async def revise_features(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.3,
     )
 
 
@@ -179,4 +188,5 @@ async def refine_feature_from_answers(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.3,
     )

@@ -41,6 +41,7 @@ async def generate_test_cases(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.4,
     )
 
 
@@ -56,7 +57,11 @@ async def critique_coverage(
 ) -> TestCaseCoverageCritique:
     summary_lines = []
     for tc in draft.test_cases:
-        summary_lines.append(f"- [{tc.test_type}] {tc.title}")
+        summary_lines.append(
+            f"- [{tc.test_type}] {tc.title}\n"
+            f"  Steps: {tc.steps}\n"
+            f"  Expected: {tc.expected_result}"
+        )
     summary = "\n".join(summary_lines) or "(empty)"
 
     return await client.parse_structured(
@@ -76,6 +81,7 @@ async def critique_coverage(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.2,
     )
 
 
@@ -111,4 +117,5 @@ async def revise_test_cases(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.3,
     )

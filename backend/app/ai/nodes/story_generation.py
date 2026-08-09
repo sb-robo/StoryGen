@@ -47,6 +47,7 @@ async def generate_stories(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.5,
     )
 
 
@@ -61,10 +62,8 @@ async def critique_invest(
 ) -> StoryInvestCritique:
     summary_lines = []
     for story in draft.stories:
-        ac = "; ".join(story.acceptance_criteria[:3])
-        summary_lines.append(
-            f"- {story.title}: {story.description[:200]} | AC: {ac}"
-        )
+        ac = "; ".join(story.acceptance_criteria)
+        summary_lines.append(f"- {story.title}: {story.description} | AC: {ac}")
     stories_summary = "\n".join(summary_lines) or "(empty)"
 
     return await client.parse_structured(
@@ -81,6 +80,7 @@ async def critique_invest(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.2,
     )
 
 
@@ -116,4 +116,5 @@ async def revise_stories(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.4,
     )

@@ -15,3 +15,18 @@ class ExtractedSubFeatureItem(BaseModel):
 
 class SubFeatureGenerationOutput(BaseModel):
     sub_features: list[ExtractedSubFeatureItem]
+
+
+class SubFeatureCritique(BaseModel):
+    passes: bool = Field(
+        description="True when sub-features are non-overlapping, complete, and well-scoped"
+    )
+    issues: list[str] = Field(
+        default_factory=list,
+        description="Overlap, gap, or scoping problems found",
+    )
+    feedback: str = Field(description="Actionable guidance for revision")
+
+
+class SubFeatureRevisionOutput(BaseModel):
+    sub_features: list[ExtractedSubFeatureItem]

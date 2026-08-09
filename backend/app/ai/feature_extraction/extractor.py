@@ -17,6 +17,11 @@ from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.services.brd.storage_service import BrdStorageService
 
 
+async def _immediate(value: FeatureExtractionOutput) -> FeatureExtractionOutput:
+    """Adapt an already-computed draft to RefinementLoop's async `generate` callable."""
+    return value
+
+
 class FeatureExtractor:
     """
     Orchestrates feature extraction using indexed BRD chunks when available.
@@ -184,7 +189,9 @@ class FeatureExtractor:
                 iteration=0,
             )
             section_outputs.append(output)
-        return self.merger.merge(section_outputs)
+        return await self.merger.merge_semantic(
+            section_outputs, embed_batch=self.client.embed_texts
+        )
 
     async def _refine_draft(
         self,
@@ -197,9 +204,13 @@ class FeatureExtractor:
         user_id: int,
         brd_id: int,
     ) -> FeatureExtractionOutput:
-        current = draft
-        for iteration in range(1, settings.LLM_MAX_ITERATIONS + 1):
-            critique_result = await feature_nodes.critique_completeness(
+        """Critique/revise a map-reduce-merged draft without re-generating from scratch."""
+        from app.ai.graphs.refinement_loop import RefinementLoop
+
+        loop = RefinementLoop[FeatureExtractionOutput, object](self.client)
+
+        async def critique(current: FeatureExtractionOutput, iteration: int):
+            return await feature_nodes.critique_completeness(
                 self.client,
                 section_hints=context.section_hints,
                 draft=current,
@@ -210,8 +221,8 @@ class FeatureExtractor:
                 brd_id=brd_id,
                 iteration=iteration,
             )
-            if critique_result.passes:
-                break
+
+        async def revise(current: FeatureExtractionOutput, critique_result, iteration: int):
             revised = await feature_nodes.revise_features(
                 self.client,
                 brd_content=context.brd_content,
@@ -224,5 +235,11 @@ class FeatureExtractor:
                 brd_id=brd_id,
                 iteration=iteration,
             )
-            current = FeatureExtractionOutput(features=revised.features)
-        return current
+            return FeatureExtractionOutput(features=revised.features)
+
+        return await loop.run(
+            generate=lambda: _immediate(draft),
+            critique=critique,
+            passes=lambda result: result.passes,
+            revise=revise,
+        )

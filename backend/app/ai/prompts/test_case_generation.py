@@ -24,12 +24,14 @@ Generate test cases for this story. Honor the test depth preference in the setti
 Use the BRD sections to ground edge cases and expected results when relevant.
 """
 
-CRITIQUE_SYSTEM = """You review test case coverage for a user story.
+CRITIQUE_SYSTEM = """You review test case coverage and quality for a user story.
 
 Check for:
 - At least one happy_path test
 - Edge cases for boundary/validation scenarios when relevant
 - Negative tests for error/failure paths when relevant
+- Steps that are vague or not concretely executable
+- expected_result values that aren't objectively verifiable
 
 Be practical — not every story needs all three types, but flag obvious gaps.
 """

@@ -42,6 +42,7 @@ async def estimate_points(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.3,
     )
 
 
@@ -77,6 +78,7 @@ async def critique_estimate(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.2,
     )
 
 
@@ -111,4 +113,5 @@ async def revise_estimate(
         operation_id=operation_id,
         user_id=user_id,
         brd_id=brd_id,
+        temperature=0.2,
     )

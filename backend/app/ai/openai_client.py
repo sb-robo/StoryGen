@@ -55,6 +55,7 @@ class OpenAIClient:
         operation_id: str | None = None,
         user_id: int | None = None,
         brd_id: int | None = None,
+        temperature: float | None = None,
     ) -> T:
         if self._client is None:
             raise RuntimeError(
@@ -75,12 +76,17 @@ class OpenAIClient:
             brd_id=brd_id,
         )
 
+        create_kwargs: dict = {}
+        if settings.LLM_ENABLE_TEMPERATURE_CONTROL and temperature is not None:
+            create_kwargs["temperature"] = temperature
+
         started = time.perf_counter()
         try:
             response = await self._client.beta.chat.completions.parse(
                 model=self.model,
                 messages=messages,
                 response_format=response_model,
+                **create_kwargs,
             )
         except Exception as exc:
             latency_ms = int((time.perf_counter() - started) * 1000)

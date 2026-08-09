@@ -1,4 +1,4 @@
-from app.ai.nodes import sub_feature_generation as nodes
+from app.ai.graphs.sub_feature_generation import run_sub_feature_generation_graph
 from app.ai.openai_client import OpenAIClient
 from app.ai.states.sub_feature_state import SubFeatureGenerationOutput
 
@@ -16,7 +16,7 @@ async def generate_sub_features_from_feature(
     user_id: int,
     brd_id: int,
 ) -> SubFeatureGenerationOutput:
-    return await nodes.generate_sub_features(
+    return await run_sub_feature_generation_graph(
         client,
         feature_title=feature_title,
         feature_description=feature_description,

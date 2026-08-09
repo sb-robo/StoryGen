@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 3
     LLM_TIMEOUT_SECONDS: int = 120
     LLM_MAX_ITERATIONS: int = 2
+    LLM_ENABLE_TEMPERATURE_CONTROL: bool = False
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
     SMTP_USERNAME: str | None = None
