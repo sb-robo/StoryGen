@@ -140,7 +140,7 @@ def test_generate_test_cases_returns_202(client, mock_test_case_service):
         )
     )
 
-    response = client.post("/api/v1/stories/1/test-cases/generate")
+    response = client.post("/api/v1/test-cases/generate/1")
 
     assert response.status_code == 202
     assert response.json()["operation_type"] == "test_case_generation"
@@ -151,7 +151,7 @@ def test_generate_test_cases_requires_approved_story(client, mock_test_case_serv
         side_effect=HTTPException(status_code=409, detail="Story must be approved")
     )
 
-    response = client.post("/api/v1/stories/1/test-cases/generate")
+    response = client.post("/api/v1/test-cases/generate/1")
 
     assert response.status_code == 409
 

@@ -60,8 +60,46 @@ def test_operation_response_urls_for_story_generation():
         updated_at=now,
     )
     assert op.status_url == (
-        "/api/v1/sub-features/status/33333333-3333-3333-3333-333333333333"
+        "/api/v1/stories/status/33333333-3333-3333-3333-333333333333"
     )
     assert op.result_url == (
-        "/api/v1/sub-features/result/33333333-3333-3333-3333-333333333333"
+        "/api/v1/stories/result/33333333-3333-3333-3333-333333333333"
+    )
+
+
+def test_operation_response_urls_for_sub_feature_generation():
+    now = datetime.now(timezone.utc)
+    op = OperationResponse(
+        operation_id="44444444-4444-4444-4444-444444444444",
+        operation_type="sub_feature_generation",
+        status="pending",
+        resource_type="feature",
+        resource_id=7,
+        created_at=now,
+        updated_at=now,
+    )
+    assert op.status_url == (
+        "/api/v1/sub-features/status/44444444-4444-4444-4444-444444444444"
+    )
+    assert op.result_url == (
+        "/api/v1/sub-features/result/44444444-4444-4444-4444-444444444444"
+    )
+
+
+def test_operation_response_urls_for_test_case_generation():
+    now = datetime.now(timezone.utc)
+    op = OperationResponse(
+        operation_id="55555555-5555-5555-5555-555555555555",
+        operation_type="test_case_generation",
+        status="pending",
+        resource_type="story",
+        resource_id=9,
+        created_at=now,
+        updated_at=now,
+    )
+    assert op.status_url == (
+        "/api/v1/test-cases/status/55555555-5555-5555-5555-555555555555"
+    )
+    assert op.result_url == (
+        "/api/v1/test-cases/result/55555555-5555-5555-5555-555555555555"
     )

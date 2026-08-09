@@ -138,6 +138,12 @@ export function computePipelineState({ brdStatus, features, subFeatures, stories
 }
 
 /** Ready-to-export counts for UI copy. */
+/** Approved stories that do not yet have any test cases in the pipeline tree. */
+export function storiesNeedingTestCases(stories = [], testCases = []) {
+  const storyIdsWithTests = new Set(testCases.map((tc) => tc.story_id))
+  return stories.filter((s) => s.status === 'approved' && !storyIdsWithTests.has(s.id))
+}
+
 export function getExportReadiness({ stories = [], testCases = [] } = {}) {
   const approvedStories = stories.filter((s) => s.status === 'approved').length
   const approvedTests = testCases.filter((t) => t.status === 'approved').length
@@ -371,8 +377,13 @@ export function getSuggestedStep({ brdStatus, pipeline, reviewQueue }) {
     return { label: 'Estimate story points for approved stories', action: 'batch_points', stageId: 'points' }
   }
 
-  if (stages.tests.counts?.total === 0 && stages.tests.status !== 'locked') {
-    return { label: 'Generate test cases for approved stories', action: 'batch_tests', stageId: 'tests' }
+  const needsTests = storiesNeedingTestCases(stories, testCases)
+  if (needsTests.length > 0 && stages.tests.status !== 'locked') {
+    return {
+      label: `Generate test cases for ${needsTests.length} stor${needsTests.length !== 1 ? 'ies' : 'y'} without tests`,
+      action: 'batch_tests',
+      stageId: 'tests',
+    }
   }
 
   if (stages.export.status !== 'locked') {
@@ -442,11 +453,12 @@ export function getBatchActions({ pipeline, features, subFeatures, stories, test
   }
 
   const approvedStories = stories.filter((s) => s.status === 'approved')
-  if (approvedStories.length > 0 && stages.tests.counts?.total === 0) {
+  const needsTests = storiesNeedingTestCases(stories, testCases)
+  if (needsTests.length > 0) {
     actions.push({
       id: 'batch_tests',
       label: 'Generate test cases',
-      count: approvedStories.length,
+      count: needsTests.length,
     })
   }
 

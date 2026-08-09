@@ -1,4 +1,5 @@
 import * as brdApi from '../api/brds'
+import * as featureApi from '../api/features'
 
 async function trackBatchOps(batch, labelPrefix, runJob) {
   const ops = batch?.operations ?? []
@@ -14,7 +15,7 @@ export async function runBatchAction(actionId, { brdId, features, runJob }) {
   switch (actionId) {
     case 'extract_features': {
       const label = features.length > 0 ? 'Regenerate features' : 'Extract features'
-      await runJob(label, () => brdApi.extractFeatures(brdId))
+      await runJob(label, () => featureApi.extractFeatures(brdId))
       break
     }
 

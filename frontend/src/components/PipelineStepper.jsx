@@ -24,7 +24,15 @@ function stepLabel(stage, stageData, exportReadiness) {
   return stage.label
 }
 
-export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAction, busy, exportReadiness }) {
+export function PipelineStepper({
+  stages,
+  activeStage,
+  onStageClick,
+  onPrimaryAction,
+  busy,
+  exportReadiness,
+  storiesNeedingTestsCount = 0,
+}) {
   if (!stages) return null
 
   return (
@@ -35,6 +43,7 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
           const isActive = activeStage === stage.id
           const isLocked = stageData.status === 'locked'
           const showRegenerateFeatures = stage.id === 'features' && stageData.counts?.total > 0 && stageData.pending === 0
+          const showTestsGenerate = stage.id === 'tests' && storiesNeedingTestsCount > 0
           const showCta =
             stage.id !== 'parse' &&
             !isLocked &&
@@ -42,7 +51,8 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
               stageData.status === 'needs_review' ||
               stageData.status === 'in_progress' ||
               stageData.status === 'ready' ||
-              showRegenerateFeatures)
+              showRegenerateFeatures ||
+              showTestsGenerate)
 
           let ctaLabel = null
           if (stage.id === 'features' && stageData.counts?.total === 0) ctaLabel = 'Extract features'
@@ -52,9 +62,11 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
           else if (stage.id === 'sub_features' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
           else if (stage.id === 'stories' && stageData.counts?.total === 0) ctaLabel = 'Generate stories'
           else if (stage.id === 'stories' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
+          else if (stage.id === 'points' && stageData.status === 'not_started') ctaLabel = 'Estimate points'
           else if (stage.id === 'points' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending} points`
-          else if (stage.id === 'tests' && stageData.counts?.total === 0) ctaLabel = 'Generate test cases'
-          else if (stage.id === 'tests' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
+          else if (stage.id === 'tests' && storiesNeedingTestsCount > 0) {
+            ctaLabel = `Generate tests (${storiesNeedingTestsCount})`
+          } else if (stage.id === 'tests' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
           else if (stage.id === 'export') ctaLabel = 'Export…'
 
           const exportTitle =

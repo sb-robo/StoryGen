@@ -1,5 +1,9 @@
 import { api } from './client'
 
+export function generateStories(subFeatureId) {
+  return api.post(`/stories/generate/${subFeatureId}`)
+}
+
 export function getStoryStatus(operationId) {
   return api.get(`/stories/status/${operationId}`)
 }
@@ -34,10 +38,6 @@ export function updatePoints(storyId, payload) {
 
 export function approvePoints(storyId) {
   return api.post(`/stories/${storyId}/points/approve`)
-}
-
-export function generateTestCases(storyId) {
-  return api.post(`/stories/${storyId}/test-cases/generate`)
 }
 
 export function listTestCases(storyId, status) {

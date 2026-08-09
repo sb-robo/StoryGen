@@ -1,9 +1,10 @@
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
+from app.db.models.brd_test_case import BrdTestCase
 from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
 from app.repositories.brd_repository import BrdRepository
 from app.schemas.batch_schema import BatchOperationResponse, BatchSkippedItem
@@ -113,6 +114,12 @@ class BatchService:
         self, user_id: int, brd_id: int
     ) -> tuple[BatchOperationResponse, list[str]]:
         await self._ensure_owned_brd(user_id, brd_id)
+        has_tests = exists(
+            select(BrdTestCase.id).where(
+                BrdTestCase.story_id == BrdStory.id,
+                BrdTestCase.user_id == user_id,
+            )
+        )
         result = await self.db.execute(
             select(BrdStory)
             .join(BrdSubFeature, BrdSubFeature.id == BrdStory.sub_feature_id)
@@ -121,6 +128,7 @@ class BatchService:
                 BrdStory.user_id == user_id,
                 BrdFeature.brd_id == brd_id,
                 BrdStory.status == StoryReviewStatus.APPROVED.value,
+                ~has_tests,
             )
         )
         stories = list(result.scalars().all())

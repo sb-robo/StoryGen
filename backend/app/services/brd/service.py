@@ -236,7 +236,7 @@ class BrdService:
         # (the unique-name insert failure rolls back the whole transaction).
         await self.db.commit()
 
-        settings = parse_pipeline_settings(pipeline_settings)
+        pipeline = parse_pipeline_settings(pipeline_settings)
         brd = BrdDocument(
             user_id=user_id,
             name=brd_name,
@@ -248,7 +248,7 @@ class BrdService:
             storage_path="",
             original_path="",
             status=BrdStatus.UPLOADED.value,
-            pipeline_settings=settings.model_dump(mode="json"),
+            pipeline_settings=pipeline.model_dump(mode="json"),
         )
         try:
             brd = await self.repo.create(brd)

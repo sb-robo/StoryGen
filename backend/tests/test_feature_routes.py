@@ -83,7 +83,7 @@ def test_extract_features_returns_202(client, mock_feature_service):
         return_value=_make_operation_response()
     )
 
-    response = client.post("/api/v1/brds/10/features/extract")
+    response = client.post("/api/v1/features/extract/10")
 
     assert response.status_code == 202
     body = response.json()
@@ -96,7 +96,7 @@ def test_extract_features_propagates_unparsed_brd_conflict(client, mock_feature_
         side_effect=HTTPException(status_code=409, detail="BRD must be parsed")
     )
 
-    response = client.post("/api/v1/brds/10/features/extract")
+    response = client.post("/api/v1/features/extract/10")
 
     assert response.status_code == 409
 

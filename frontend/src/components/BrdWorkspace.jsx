@@ -13,6 +13,7 @@ import {
   getSuggestedStep,
   ITEM_TYPES,
   regenerateConfirmMessage,
+  storiesNeedingTestCases,
 } from '../utils/pipeline'
 import {
   hydratePipelineSettings,
@@ -230,6 +231,10 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   const suggestedStep = useMemo(
     () => getSuggestedStep({ brdStatus: brd.status, pipeline, reviewQueue }),
     [brd.status, pipeline, reviewQueue],
+  )
+  const storiesWithoutTests = useMemo(
+    () => storiesNeedingTestCases(stories ?? [], testCases ?? []),
+    [stories, testCases],
   )
   const batchActions = useMemo(
     () =>
@@ -503,7 +508,8 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     }
 
     if (stageId === 'tests') {
-      if (pipeline?.stages.tests.counts?.total === 0) {
+      const needsTests = storiesNeedingTestCases(stories ?? [], testCases ?? [])
+      if (needsTests.length > 0) {
         await handleBatchAction('batch_tests')
       } else {
         setWorkspaceTab('queue')
@@ -660,6 +666,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
         onPrimaryAction={handlePrimaryAction}
         busy={busy || loading}
         exportReadiness={exportReadiness}
+        storiesNeedingTestsCount={storiesWithoutTests.length}
       />
 
       {brdReady && pipeline?.stages?.export?.status === 'ready' && (
@@ -755,8 +762,8 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
 
             <div
               className={`workspace-main ${detailInMiddle && !isNarrow ? 'workspace-main-compact' : ''} ${
-                !selectedItem && !isNarrow ? 'workspace-main-solo' : ''
-              }`}
+                !selectedItem && !isNarrow && workspaceTab !== 'queue' ? 'workspace-main-solo' : ''
+              } ${workspaceTab === 'queue' && !isNarrow ? 'workspace-main-queue' : ''}`}
             >
               {workspaceTab === 'overview' && (
                 <OverviewTab
@@ -819,6 +826,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                   editRequestKey={editRequestKey}
                   onEditRequestHandled={() => setEditRequestKey(null)}
                   parents={parents}
+                  testCases={testCases ?? []}
                   wide={detailInMiddle && !isNarrow}
                 />
               </>

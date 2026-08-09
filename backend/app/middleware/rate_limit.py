@@ -58,12 +58,17 @@ def match_rate_limit_bucket(method: str, path: str) -> tuple[str, int] | None:
     if p == f"{API_PREFIX}/brds/upload":
         return "upload", settings.RATE_LIMIT_UPLOAD_PER_MINUTE
 
+    # Single-item AI generation triggers: `POST /{resource}/generate/{parent_id}`
+    # or `POST /{resource}/extract/{parent_id}` — parent id is a path suffix,
+    # so match on the static prefix instead of the (variable) full path.
+    ai_prefixes = (
+        f"{API_PREFIX}/features/extract/",
+        f"{API_PREFIX}/sub-features/generate/",
+        f"{API_PREFIX}/stories/generate/",
+        f"{API_PREFIX}/test-cases/generate/",
+    )
     ai_suffixes = (
-        "/features/extract",
-        "/sub-features/generate",
-        "/stories/generate",
         "/points/estimate",
-        "/test-cases/generate",
         "/sub-features/generate-all",
         "/stories/generate-all",
         "/points/estimate-all",
@@ -71,6 +76,8 @@ def match_rate_limit_bucket(method: str, path: str) -> tuple[str, int] | None:
         "/reparse",
     )
     if p.endswith("/retry") and "/operations/" in p:
+        return "ai", settings.RATE_LIMIT_AI_PER_MINUTE
+    if any(p.startswith(prefix) for prefix in ai_prefixes):
         return "ai", settings.RATE_LIMIT_AI_PER_MINUTE
     if any(p.endswith(suffix) for suffix in ai_suffixes):
         return "ai", settings.RATE_LIMIT_AI_PER_MINUTE

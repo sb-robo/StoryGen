@@ -30,6 +30,7 @@ export function DetailPanel({
   editRequestKey,
   onEditRequestHandled,
   parents,
+  testCases = [],
   wide,
 }) {
   const [editItem, setEditItem] = useState(null)
@@ -250,6 +251,7 @@ export function DetailPanel({
         {item.type === ITEM_TYPES.SUB_FEATURE && (
           <SubFeatureDetailContent
             subFeature={entity}
+            testCases={testCases}
             showRationale={showRationale}
             onToggleRationale={() => setShowRationale(!showRationale)}
             onRefresh={onRefresh}
@@ -274,6 +276,7 @@ export function DetailPanel({
         {(item.type === ITEM_TYPES.STORY || item.type === ITEM_TYPES.POINTS) && (
           <StoryDetailTabs
             story={entity}
+            pipelineTestCases={testCases}
             initialTab={item.type === ITEM_TYPES.POINTS ? 'points' : 'story'}
             onRefresh={onRefresh}
             busy={busy}
@@ -438,7 +441,7 @@ function FeatureDetailContent({
     try {
       const isRegen = subFeatures.length > 0
       const label = isRegen ? `Regenerate sub-features: ${feature.title}` : `Generate sub-features: ${feature.title}`
-      await onRunJob(label, () => featureApi.generateSubFeatures(feature.id))
+      await onRunJob(label, () => subFeatureApi.generateSubFeatures(feature.id))
     } finally {
       setEnqueueing(false)
     }
@@ -530,6 +533,7 @@ function FeatureDetailContent({
 
 function SubFeatureDetailContent({
   subFeature,
+  testCases = [],
   showRationale,
   onToggleRationale,
   busy,
@@ -566,7 +570,7 @@ function SubFeatureDetailContent({
     try {
       const isRegen = stories.length > 0
       const label = isRegen ? `Regenerate stories: ${subFeature.title}` : `Generate stories: ${subFeature.title}`
-      await onRunJob(label, () => subFeatureApi.generateStories(subFeature.id))
+      await onRunJob(label, () => storyApi.generateStories(subFeature.id))
     } finally {
       setEnqueueing(false)
     }
@@ -627,7 +631,9 @@ function SubFeatureDetailContent({
         )}
         {stories.length > 0 && (
           <div className="feature-grid">
-            {stories.map((story) => (
+            {stories.map((story) => {
+              const storyTestCount = testCases.filter((tc) => Number(tc.story_id) === Number(story.id)).length
+              return (
               <button key={story.id} type="button" className="feature-tile" onClick={() => onSelectStory(story)}>
                 <div className="feature-tile-top">
                   <StatusBadge status={story.status} />
@@ -639,11 +645,23 @@ function SubFeatureDetailContent({
                 <p className="feature-tile-preview">{story.description}</p>
                 <div className="feature-tile-footer">
                   <span className="meta">
-                    Story {story.status === 'approved' ? '✓' : '○'} · Points {story.points_status === 'approved' ? '✓' : story.points_status ? '⏳' : '○'}
+                    Story {story.status === 'approved' ? '✓' : '○'}
+                    {' · '}
+                    Points{' '}
+                    {story.story_points != null
+                      ? `${story.story_points}${story.points_status === 'approved' ? ' ✓' : story.points_status ? ' ⏳' : ''}`
+                      : story.points_status === 'approved'
+                        ? '✓'
+                        : story.points_status
+                          ? '⏳'
+                          : '○'}
+                    {' · '}
+                    Tests {storyTestCount > 0 ? `${storyTestCount} ✓` : '○'}
                   </span>
                 </div>
               </button>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
@@ -713,7 +731,7 @@ function getNextAction(type, entity, childCount) {
       return {
         buttonLabel: hasChildren ? 'Regenerate sub-features' : 'Generate sub-features',
         label: `${hasChildren ? 'Regenerate' : 'Generate'} sub-features: ${entity.title}`,
-        run: () => featureApi.generateSubFeatures(entity.id),
+        run: () => subFeatureApi.generateSubFeatures(entity.id),
         isRegenerate: hasChildren,
         childLabel: 'sub-features',
       }
@@ -722,7 +740,7 @@ function getNextAction(type, entity, childCount) {
       return {
         buttonLabel: hasChildren ? 'Regenerate stories' : 'Generate stories',
         label: `${hasChildren ? 'Regenerate' : 'Generate'} stories: ${entity.title}`,
-        run: () => subFeatureApi.generateStories(entity.id),
+        run: () => storyApi.generateStories(entity.id),
         isRegenerate: hasChildren,
         childLabel: 'stories',
       }

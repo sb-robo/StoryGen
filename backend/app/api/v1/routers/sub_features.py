@@ -15,17 +15,41 @@ from app.schemas.sub_feature_schema import (
     SubFeatureUpdateRequest,
 )
 from app.services.ai import StoryService, SubFeatureService
-from app.services.ai.tasks import run_story_generation_task
+from app.services.ai.tasks import run_sub_feature_generation_task
 from app.services.operations import OperationService
 from app.utils.operation_urls import SUB_FEATURE_OPERATION_TYPES
 
 router = APIRouter()
 
 
+@router.post(
+    "/generate/{feature_id}",
+    response_model=OperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Generate sub-features from an approved feature (async)",
+    description=(
+        "Poll `GET /sub-features/status/{operation_id}` then "
+        "`GET /sub-features/result/{operation_id}`."
+    ),
+)
+async def generate_sub_features(
+    feature_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    sub_feature_service: SubFeatureService = Depends(get_sub_feature_service),
+) -> OperationResponse:
+    operation = await sub_feature_service.enqueue_generation(
+        current_user.id, feature_id
+    )
+    background_tasks.add_task(run_sub_feature_generation_task, operation.operation_id)
+    return operation
+
+
 @router.get(
     "/status/{operation_id}",
     response_model=OperationResponse,
-    summary="Get sub-feature story generation operation status",
+    summary="Get sub-feature generation operation status",
+    description="Poll for sub_feature_generation operations until `done` is true.",
 )
 async def get_sub_feature_operation_status(
     operation_id: str,
@@ -42,7 +66,7 @@ async def get_sub_feature_operation_status(
 @router.get(
     "/result/{operation_id}",
     response_model=OperationResultResponse,
-    summary="Get sub-feature story generation operation result",
+    summary="Get sub-feature generation operation result",
 )
 async def get_sub_feature_operation_result(
     operation_id: str,
@@ -115,29 +139,6 @@ async def reopen_sub_feature(
     return await sub_feature_service.reopen_sub_feature(
         current_user.id, sub_feature_id
     )
-
-
-@router.post(
-    "/{sub_feature_id}/stories/generate",
-    response_model=OperationResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Generate user stories from an approved sub-feature (async)",
-    description=(
-        "Poll `GET /sub-features/status/{operation_id}` then "
-        "`GET /sub-features/result/{operation_id}`."
-    ),
-)
-async def generate_stories(
-    sub_feature_id: int,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    story_service: StoryService = Depends(get_story_service),
-) -> OperationResponse:
-    operation = await story_service.enqueue_generation(
-        current_user.id, sub_feature_id
-    )
-    background_tasks.add_task(run_story_generation_task, operation.operation_id)
-    return operation
 
 
 @router.get(

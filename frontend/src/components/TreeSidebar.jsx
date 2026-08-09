@@ -161,6 +161,11 @@ export function TreeSidebar({ features, subFeatures, stories, testCases, selecte
                                             pts
                                           </span>
                                         )}
+                                        {childTestCases.length > 0 && (
+                                          <span className="tree-tests-badge" title={`${childTestCases.length} test case${childTestCases.length !== 1 ? 's' : ''}`}>
+                                            {childTestCases.length}T
+                                          </span>
+                                        )}
                                       </button>
                                     </div>
 

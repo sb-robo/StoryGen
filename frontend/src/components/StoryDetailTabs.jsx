@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as storyApi from '../api/stories'
 import * as testCaseApi from '../api/testCases'
 import { useJobs } from '../context/JobsContext'
@@ -14,8 +14,13 @@ const TABS = [
   { id: 'tests', label: 'Test cases' },
 ]
 
+function testCasesForStory(allTestCases, storyId) {
+  return allTestCases.filter((tc) => Number(tc.story_id) === Number(storyId))
+}
+
 export function StoryDetailTabs({
   story,
+  pipelineTestCases = [],
   initialTab = 'story',
   onRefresh,
   busy,
@@ -23,7 +28,7 @@ export function StoryDetailTabs({
   onSelectTestCase,
 }) {
   const [tab, setTab] = useState(initialTab)
-  const [testCases, setTestCases] = useState([])
+  const [testCases, setTestCases] = useState(() => testCasesForStory(pipelineTestCases, story.id))
   const [editPoints, setEditPoints] = useState(false)
   const [editTestCase, setEditTestCase] = useState(null)
   const [enqueueing, setEnqueueing] = useState(false)
@@ -32,13 +37,26 @@ export function StoryDetailTabs({
   const pointsJobRunning = isJobRunningFor('story', story.id, 'story_point_estimation')
   const testsJobRunning = isJobRunningFor('story', story.id, 'test_case_generation')
 
+  const pipelineCases = useMemo(
+    () => testCasesForStory(pipelineTestCases, story.id),
+    [pipelineTestCases, story.id],
+  )
+
   const loadTestCases = useCallback(async () => {
-    const res = await storyApi.listTestCases(story.id)
-    setTestCases(res.items)
-  }, [story.id])
+    try {
+      const res = await storyApi.listTestCases(story.id)
+      setTestCases(res.items ?? [])
+    } catch {
+      setTestCases(pipelineCases)
+    }
+  }, [story.id, pipelineCases])
 
   useEffect(() => {
-    loadTestCases()
+    setTestCases(pipelineCases)
+  }, [pipelineCases])
+
+  useEffect(() => {
+    void loadTestCases()
   }, [loadTestCases])
 
   useEffect(() => {
@@ -82,6 +100,23 @@ export function StoryDetailTabs({
   const formBusy = busy || enqueueing || reviewBusy
   const pointsBusy = formBusy || pointsJobRunning
   const testsBusy = formBusy || testsJobRunning
+  const storiesWithTestsCount = useMemo(
+    () => new Set(pipelineTestCases.map((tc) => tc.story_id)).size,
+    [pipelineTestCases],
+  )
+  const pointsLabel =
+    story.story_points != null ? `${story.story_points} pts` : 'Not estimated'
+  const testsLabel = testCases.length === 1 ? '1 test case' : `${testCases.length} test cases`
+
+  function tabLabel(t) {
+    if (t.id === 'points' && story.story_points != null) {
+      return `${t.label} (${story.story_points})`
+    }
+    if (t.id === 'tests' && testCases.length > 0) {
+      return `${t.label} (${testCases.length})`
+    }
+    return t.label
+  }
 
   return (
     <div className="story-tabs">
@@ -95,13 +130,28 @@ export function StoryDetailTabs({
             className={`tab-btn ${tab === t.id ? 'tab-btn-active' : ''}`}
             onClick={() => setTab(t.id)}
           >
-            {t.label}
+            {tabLabel(t)}
           </button>
         ))}
       </div>
 
       {tab === 'story' && (
         <div className="tab-panel">
+          <section className="detail-block story-derived-summary">
+            <h4>Story points &amp; tests</h4>
+            <div className="story-derived-grid">
+              <button type="button" className="story-derived-card" onClick={() => setTab('points')}>
+                <span className="story-derived-label">Story points</span>
+                <span className="story-derived-value">{pointsLabel}</span>
+                {story.points_status && <StatusBadge status={story.points_status} />}
+              </button>
+              <button type="button" className="story-derived-card" onClick={() => setTab('tests')}>
+                <span className="story-derived-label">Test cases</span>
+                <span className="story-derived-value">{testsLabel}</span>
+              </button>
+            </div>
+          </section>
+
           <section className="detail-block">
             <h4>Description</h4>
             <p className="review-description">{story.description}</p>
@@ -138,6 +188,18 @@ export function StoryDetailTabs({
             {story.points_status && <StatusBadge status={story.points_status} />}
           </div>
           {story.points_rationale && <p className="meta">{story.points_rationale}</p>}
+          {!story.story_points && story.status === 'approved' && (
+            <p className="empty-hint">
+              Points have not been estimated for this story yet. Click Estimate points below, or use
+              {' '}
+              <strong>Estimate points</strong>
+              {' '}
+              in Overview batch actions to run all stories at once.
+            </p>
+          )}
+          {!story.story_points && story.status !== 'approved' && (
+            <p className="empty-hint">Approve this story before estimating points.</p>
+          )}
           {story.status === 'approved' && (
             <div className="detail-actions">
               <button
@@ -146,7 +208,7 @@ export function StoryDetailTabs({
                 onClick={() => runJob('Estimate story points', () => storyApi.estimatePoints(story.id))}
                 disabled={pointsBusy}
               >
-                {pointsJobRunning ? 'Estimating…' : 'Estimate points'}
+                {pointsJobRunning ? 'Estimating…' : story.story_points ? 'Re-estimate points' : 'Estimate points'}
               </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditPoints(true)} disabled={formBusy}>
                 Override
@@ -176,19 +238,47 @@ export function StoryDetailTabs({
 
       {tab === 'tests' && (
         <div className="tab-panel">
+          {story.status !== 'approved' && (
+            <p className="empty-hint">Approve this story before generating test cases.</p>
+          )}
           {story.status === 'approved' && (
             <div className="detail-actions">
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                onClick={() => runJob('Generate test cases', () => storyApi.generateTestCases(story.id))}
+                onClick={() => runJob('Generate test cases', () => testCaseApi.generateTestCases(story.id))}
                 disabled={testsBusy}
               >
-                {testsJobRunning ? 'Generating…' : 'Generate test cases'}
+                {testsJobRunning ? 'Generating…' : testCases.length > 0 ? 'Regenerate test cases' : 'Generate test cases'}
               </button>
             </div>
           )}
-          {testCases.length === 0 && <p className="empty-hint">No test cases yet.</p>}
+          {testCases.length === 0 && (
+            <p className="empty-hint">
+              No test cases for this story yet.
+              {storiesWithTestsCount > 0 && (
+                <>
+                  {' '}
+                  {storiesWithTestsCount} other
+                  {storiesWithTestsCount === 1 ? ' story has' : ' stories have'}
+                  {' '}
+                  test cases in this BRD — generation is per story.
+                </>
+              )}
+              {story.status === 'approved' ? (
+                <>
+                  {' '}
+                  Click Generate test cases below, or use
+                  {' '}
+                  <strong>Generate test cases</strong>
+                  {' '}
+                  in Overview batch actions for all stories still missing tests.
+                </>
+              ) : (
+                ' Approve this story first, then generate test cases.'
+              )}
+            </p>
+          )}
           {testCases.length > 0 && (
             <div className="feature-grid">
               {testCases.map((tc) => (

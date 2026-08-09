@@ -58,10 +58,6 @@ export function updatePipelineSettings(brdId, pipelineSettings) {
   })
 }
 
-export function extractFeatures(brdId) {
-  return api.post(`/brds/${brdId}/features/extract`)
-}
-
 export function listFeatures(brdId, status) {
   const qs = status ? `?status=${status}` : ''
   return api.get(`/brds/${brdId}/features${qs}`)

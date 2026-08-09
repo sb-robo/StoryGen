@@ -7,8 +7,9 @@ class ExtractedFeatureItem(BaseModel):
     )
     description: str = Field(
         description=(
-            "2–4 sentences: who benefits, what outcome the capability delivers, "
-            "and key BRD constraints / boundaries vs sibling features"
+            "1–2 sentence overview of who benefits and the outcome, then a blank line "
+            "and 3–6 markdown bullet points (`- ...`) for key scope, constraints, "
+            "integrations, personas, or boundaries from the BRD"
         )
     )
     confidence: float = Field(ge=0.0, le=1.0, description="Extraction confidence 0-1")
@@ -28,7 +29,10 @@ class ExtractedFeatureItem(BaseModel):
     )
     clarifying_questions: list[str] = Field(
         default_factory=list,
-        description="1–3 questions when requirements are ambiguous (omit when clear)",
+        description=(
+            "1–3 questions when confidence is 0.55–0.84 (gaps/boundaries unclear); "
+            "2–3 when below 0.55; omit when confidence ≥ 0.85 unless one critical gap remains"
+        ),
     )
 
 

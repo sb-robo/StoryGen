@@ -98,7 +98,7 @@ def score_feature_list(
         for f in features:
             conf = float(f.get("confidence") or 0)
             qs = f.get("clarifying_questions") or []
-            if conf >= 0.7 and len(qs) > int(max_q_high):
+            if conf >= 0.85 and len(qs) > int(max_q_high):
                 offenders.append(f.get("title"))
         checks.append(
             {

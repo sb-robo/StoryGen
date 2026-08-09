@@ -17,11 +17,14 @@ EXTRACT_SYSTEM = """You are a senior business analyst extracting software produc
 2. Each feature must have a clear boundary: what is in scope vs left to sibling features.
 3. Use section paths / headings as scope hints — do not invent a 1:1 feature per heading.
 4. Merge near-duplicates; split only when capabilities are independently releasable.
-5. Description: 2–4 sentences covering who benefits, what outcome, and key constraints from the BRD.
+5. Description: Start with 1–2 sentences on who benefits and the outcome this capability delivers. Then add a blank line and 3–6 markdown bullet points (`- ...`) highlighting the most important scope, constraints, integrations, personas, rules, or boundaries from the BRD. Keep bullets specific and grounded — do not repeat the title or restate the opening sentences.
 6. Rationale: cite why this is a distinct capability (reference section path or requirement theme).
 7. source_excerpt: short quote or section path from the BRD (prefer the [Section Path] headers when present).
 8. source_section_path: when content is tagged with [Section Path], copy the best-matching path exactly.
-9. Confidence: 0.7–1.0 when well-supported; 0.3–0.6 when vague — then add 1–3 clarifying_questions.
+9. Confidence and clarifying questions:
+   - 0.85–1.0: Well-supported by the BRD — omit clarifying_questions (max 1 only if one critical gap remains).
+   - 0.55–0.84: Partially supported or boundaries unclear — add 1–3 clarifying_questions on real gaps.
+   - Below 0.55: Vague or underspecified — add 2–3 clarifying_questions.
 10. Respect user pipeline settings (domain, in/out of scope, count preference, instructions) as authoritative.
 
 When EXISTING APPROVED FEATURES are provided, do not recreate them. Extract only additional or missing capabilities that complement them.
@@ -42,7 +45,7 @@ BRD name: {brd_name}
 {brd_content}
 --- END ---
 
-Return a structured feature list. Prefer clear capability boundaries and grounded excerpts.
+Return a structured feature list. Prefer clear capability boundaries, grounded excerpts, and descriptions with bullet highlights.
 """
 
 CRITIQUE_SYSTEM = """You review a feature list for completeness AND structural quality against a BRD.
@@ -76,11 +79,11 @@ REVISE_SYSTEM = """You revise a feature list based on completeness/structure fee
 Rules:
 - Merge duplicates; split only when independently releasable.
 - Add missing capabilities implied by the BRD.
-- Keep descriptions outcome-focused with clear boundaries.
+- Keep descriptions outcome-focused: 1–2 summary sentences, then 3–6 markdown bullet points for key scope/constraints.
 - Preserve strong features that already look good.
 - Do not recreate EXISTING APPROVED FEATURES — leave those as covered.
 - Respect SIMILAR APPROVED FEATURES FROM YOUR OTHER BRDs — avoid near-duplicates unless scope clearly differs.
-- Keep confidence, rationale, source_excerpt, and source_section_path accurate.
+- Keep confidence, clarifying_questions, rationale, source_excerpt, and source_section_path accurate (use the confidence/question bands from extraction).
 """
 
 REVISE_USER = """Original BRD excerpt (truncated):
@@ -106,8 +109,8 @@ REFINE_FROM_ANSWERS_SYSTEM = """You revise a single extracted feature using revi
 Rules:
 - Treat reviewer answers as authoritative constraints.
 - Update title only if the answers clearly change the capability name.
-- Rewrite description to incorporate answers (scope, rules, personas, edge cases).
-- Raise confidence when answers resolve ambiguity; keep or add clarifying_questions only for remaining gaps.
+- Rewrite description as 1–2 summary sentences plus 3–6 markdown bullet points for key scope, rules, and constraints informed by the answers.
+- Raise confidence when answers resolve ambiguity; keep or add clarifying_questions only for remaining gaps (omit when confidence ≥ 0.85 unless one critical gap remains).
 - Stay faithful to the original BRD source_excerpt / section path — do not invent new scope.
 - Rationale should briefly note how answers shaped the revision.
 """

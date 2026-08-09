@@ -445,12 +445,19 @@ def _suggested_step(
             stage_id="points",
         )
 
-    if (
-        stages["tests"].status != "locked"
-        and (stages["tests"].counts.total if stages["tests"].counts else 0) == 0
-    ):
+    stories_needing_tests = [
+        s
+        for s in stories
+        if s.status == StoryReviewStatus.APPROVED.value
+        and s.id not in {tc.story_id for tc in test_cases}
+    ]
+    if stages["tests"].status != "locked" and stories_needing_tests:
+        count = len(stories_needing_tests)
         return SuggestedStep(
-            label="Generate test cases for approved stories",
+            label=(
+                f"Generate test cases for {count} "
+                f"stor{'y' if count == 1 else 'ies'} without tests"
+            ),
             action="batch_tests",
             stage_id="tests",
         )

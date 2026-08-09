@@ -19,21 +19,40 @@ from app.schemas.sub_feature_schema import (
     SubFeatureReviewResponse,
 )
 from app.services.ai import FeatureService, SubFeatureService
-from app.services.ai.tasks import run_sub_feature_generation_task
+from app.services.ai.tasks import run_feature_extraction_task
 from app.services.operations import OperationService
 from app.utils.operation_urls import FEATURE_OPERATION_TYPES
 
 router = APIRouter()
 
 
+@router.post(
+    "/extract/{brd_id}",
+    response_model=OperationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Extract features from a parsed BRD (async operation)",
+    description=(
+        "Runs AI feature extraction on parsed Markdown. "
+        "Poll `GET /features/status/{operation_id}` then "
+        "`GET /features/result/{operation_id}` for the extracted features."
+    ),
+)
+async def extract_brd_features(
+    brd_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    feature_service: FeatureService = Depends(get_feature_service),
+) -> OperationResponse:
+    operation = await feature_service.enqueue_extraction(current_user.id, brd_id)
+    background_tasks.add_task(run_feature_extraction_task, operation.operation_id)
+    return operation
+
+
 @router.get(
     "/status/{operation_id}",
     response_model=OperationResponse,
     summary="Get feature pipeline operation status",
-    description=(
-        "Poll for feature_extraction or sub_feature_generation operations "
-        "until `done` is true."
-    ),
+    description="Poll for feature_extraction operations until `done` is true.",
 )
 async def get_feature_operation_status(
     operation_id: str,
@@ -52,8 +71,8 @@ async def get_feature_operation_status(
     response_model=OperationResultResponse,
     summary="Get feature pipeline operation result",
     description=(
-        "Returns extracted features or generated sub-features when the operation "
-        "succeeded. Responds 409 while running, 422 if failed."
+        "Returns extracted features when the operation succeeded. "
+        "Responds 409 while running, 422 if failed."
     ),
 )
 async def get_feature_operation_result(
@@ -136,29 +155,6 @@ async def refine_feature_from_answers(
     feature_service: FeatureService = Depends(get_feature_service),
 ) -> FeatureResponse:
     return await feature_service.refine_from_answers(current_user.id, feature_id)
-
-
-@router.post(
-    "/{feature_id}/sub-features/generate",
-    response_model=OperationResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Generate sub-features from an approved feature (async)",
-    description=(
-        "Poll `GET /features/status/{operation_id}` then "
-        "`GET /features/result/{operation_id}`."
-    ),
-)
-async def generate_sub_features(
-    feature_id: int,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    sub_feature_service: SubFeatureService = Depends(get_sub_feature_service),
-) -> OperationResponse:
-    operation = await sub_feature_service.enqueue_generation(
-        current_user.id, feature_id
-    )
-    background_tasks.add_task(run_sub_feature_generation_task, operation.operation_id)
-    return operation
 
 
 @router.get(

@@ -50,7 +50,6 @@ from app.schemas.pipeline_schema import PipelineSummaryResponse, PipelineTreeRes
 from app.services.ai import FeatureService
 from app.services.ai.batch_service import BatchService
 from app.services.ai.tasks import (
-    run_feature_extraction_task,
     run_story_generation_task,
     run_story_point_estimation_task,
     run_sub_feature_generation_task,
@@ -246,28 +245,6 @@ async def list_brds(
         sort_by=sort_by.value,
         sort_order=sort_order.value,
     )
-
-
-@router.post(
-    "/{brd_id}/features/extract",
-    response_model=OperationResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Extract features from a parsed BRD (async operation)",
-    description=(
-        "Runs AI feature extraction on parsed Markdown. "
-        "Poll `GET /features/status/{operation_id}` then "
-        "`GET /features/result/{operation_id}` for the extracted features."
-    ),
-)
-async def extract_brd_features(
-    brd_id: int,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    feature_service: FeatureService = Depends(get_feature_service),
-) -> OperationResponse:
-    operation = await feature_service.enqueue_extraction(current_user.id, brd_id)
-    background_tasks.add_task(run_feature_extraction_task, operation.operation_id)
-    return operation
 
 
 @router.get(

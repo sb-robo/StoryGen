@@ -1,5 +1,9 @@
 import { api } from './client'
 
+export function extractFeatures(brdId) {
+  return api.post(`/features/extract/${brdId}`)
+}
+
 export function getFeatureStatus(operationId) {
   return api.get(`/features/status/${operationId}`)
 }
@@ -26,10 +30,6 @@ export function reopenFeature(id) {
 
 export function refineFeatureFromAnswers(id) {
   return api.post(`/features/${id}/refine-from-answers`)
-}
-
-export function generateSubFeatures(featureId) {
-  return api.post(`/features/${featureId}/sub-features/generate`)
 }
 
 export function listSubFeatures(featureId, status) {

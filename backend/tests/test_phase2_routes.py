@@ -119,7 +119,7 @@ def test_generate_sub_features_returns_202(client, mock_sub_feature_service):
         return_value=_make_operation()
     )
 
-    response = client.post("/api/v1/features/5/sub-features/generate")
+    response = client.post("/api/v1/sub-features/generate/5")
 
     assert response.status_code == 202
     assert response.json()["operation_type"] == "sub_feature_generation"
@@ -130,7 +130,7 @@ def test_generate_sub_features_requires_approved_feature(client, mock_sub_featur
         side_effect=HTTPException(status_code=409, detail="Feature must be approved")
     )
 
-    response = client.post("/api/v1/features/5/sub-features/generate")
+    response = client.post("/api/v1/sub-features/generate/5")
 
     assert response.status_code == 409
 
@@ -172,7 +172,7 @@ def test_generate_stories_returns_202(client, mock_story_service):
         )
     )
 
-    response = client.post("/api/v1/sub-features/2/stories/generate")
+    response = client.post("/api/v1/stories/generate/2")
 
     assert response.status_code == 202
     assert response.json()["operation_type"] == "story_generation"

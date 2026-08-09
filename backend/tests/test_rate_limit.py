@@ -21,9 +21,15 @@ def test_match_upload():
 
 def test_match_ai_extract_and_retry():
     assert (
-        match_rate_limit_bucket("POST", "/api/v1/brds/12/features/extract")[0] == "ai"
+        match_rate_limit_bucket("POST", "/api/v1/features/extract/12")[0] == "ai"
     )
     assert match_rate_limit_bucket("POST", "/api/v1/operations/abc/retry")[0] == "ai"
+
+
+def test_match_ai_generate_triggers():
+    assert match_rate_limit_bucket("POST", "/api/v1/sub-features/generate/5")[0] == "ai"
+    assert match_rate_limit_bucket("POST", "/api/v1/stories/generate/2")[0] == "ai"
+    assert match_rate_limit_bucket("POST", "/api/v1/test-cases/generate/1")[0] == "ai"
 
 
 def test_match_skips_gets_and_unlisted():
