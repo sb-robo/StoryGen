@@ -17,6 +17,15 @@ class ClarifyingAnswer(BaseModel):
     answer: str = Field(min_length=1)
 
 
+class CrossBrdSimilarMatch(BaseModel):
+    kind: str
+    id: int | None = None
+    brd_id: int | None = None
+    brd_name: str
+    title: str
+    similarity: float
+
+
 class FeatureResponse(BaseModel):
     id: int
     brd_id: int
@@ -30,6 +39,7 @@ class FeatureResponse(BaseModel):
     clarifying_answers: list[ClarifyingAnswer] = Field(default_factory=list)
     source_excerpt: str | None = None
     source_chunk_id: int | None = None
+    cross_brd_similar: list[CrossBrdSimilarMatch] = Field(default_factory=list)
     status: str
     reviewed_by: int | None = None
     reviewed_at: datetime | None = None

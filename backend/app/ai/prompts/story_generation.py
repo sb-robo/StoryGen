@@ -8,6 +8,7 @@ Rules:
 - Provide 2–5 concrete, testable acceptance criteria per story.
 - Prefer multiple small stories over one large story.
 - Include confidence and rationale.
+- When SIMILAR APPROVED STORIES FROM YOUR OTHER BRDs are provided, avoid recreating the same user outcome unless this sub-feature clearly needs a distinct story.
 """
 
 GENERATE_USER = """Parent feature:
@@ -21,6 +22,8 @@ Source excerpt: {source_excerpt}
 
 Relevant BRD sections:
 {brd_context}
+
+{cross_brd_context}
 
 {pipeline_context}
 

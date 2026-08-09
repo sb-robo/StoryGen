@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import * as storyApi from '../api/stories'
 import * as testCaseApi from '../api/testCases'
 import { useJobs } from '../context/JobsContext'
+import { CrossBrdSimilarWarning } from './CrossBrdSimilarWarning'
 import { EditModal } from './EditModal'
 import { ReviewActions } from './ReviewCard'
+import { SourceGrounding } from './SourceGrounding'
 import { StatusBadge } from './StatusBadge'
 
 const TABS = [
@@ -12,7 +14,14 @@ const TABS = [
   { id: 'tests', label: 'Test cases' },
 ]
 
-export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, onSelectTestCase }) {
+export function StoryDetailTabs({
+  story,
+  initialTab = 'story',
+  onRefresh,
+  busy,
+  onOpenChunk,
+  onSelectTestCase,
+}) {
   const [tab, setTab] = useState(initialTab)
   const [testCases, setTestCases] = useState([])
   const [editPoints, setEditPoints] = useState(false)
@@ -97,6 +106,12 @@ export function StoryDetailTabs({ story, initialTab = 'story', onRefresh, busy, 
             <h4>Description</h4>
             <p className="review-description">{story.description}</p>
           </section>
+          <CrossBrdSimilarWarning matches={story.cross_brd_similar} label="stories" />
+          <SourceGrounding
+            sourceExcerpt={story.source_excerpt}
+            sourceChunkId={story.source_chunk_id}
+            onOpenChunk={(id) => onOpenChunk?.(id, story.source_excerpt)}
+          />
           {story.acceptance_criteria?.length > 0 && (
             <section className="detail-block">
               <h4>Acceptance criteria</h4>

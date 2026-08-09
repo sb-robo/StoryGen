@@ -214,6 +214,9 @@ class StoryPointsService:
         story.points_reviewed_at = datetime.now(timezone.utc)
         story = await self.story_repo.update(story)
 
+        brd_id = await self._brd_id_for_story(story)
+        brd = await self.brd_repo.get_by_id(brd_id)
+        brd_name = brd.name if brd else f"BRD #{brd_id}"
         ac = decode_acceptance_criteria(story.acceptance_criteria)
         ac_text = "\n".join(f"- {c}" for c in ac)
         embed_text = f"{story.title}\n{story.description}\n{ac_text}".strip()
@@ -225,6 +228,8 @@ class StoryPointsService:
             title=story.title,
             text=embed_text,
             embedding=embedding,
+            brd_id=brd_id,
+            brd_name=brd_name,
         )
 
         return StoryPointsReviewResponse(

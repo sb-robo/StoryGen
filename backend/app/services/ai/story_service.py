@@ -13,6 +13,7 @@ from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.repositories.brd_repository import BrdRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.operation_repository import OperationRepository
+from app.repositories.story_embedding_repository import StoryEmbeddingRepository
 from app.repositories.story_repository import (
     StoryRepository,
     decode_acceptance_criteria,
@@ -22,6 +23,7 @@ from app.repositories.sub_feature_repository import SubFeatureRepository
 from app.schemas.operation_schema import OperationResponse
 from app.schemas.pipeline_settings_schema import format_pipeline_context
 from app.schemas.story_schema import (
+    CrossBrdSimilarMatch,
     StoryGenerationResultResponse,
     StoryListResponse,
     StoryResponse,
@@ -29,8 +31,12 @@ from app.schemas.story_schema import (
     StoryUpdateRequest,
 )
 from app.services.ai._chunk_context import fetch_brd_chunk_context
+from app.services.ai._cross_brd import (
+    annotate_stories_with_cross_brd_matches,
+    fetch_cross_brd_story_context,
+)
 from app.services.ai._helpers import ensure_operation_not_running, operation_response
-from app.utils.process_tracker import track_queued, track_run, track_saved
+from app.utils.process_tracker import track, track_error, track_queued, track_run, track_saved
 
 
 class StoryService:
@@ -46,10 +52,12 @@ class StoryService:
         self.feature_repo = FeatureRepository(db)
         self.brd_repo = BrdRepository(db)
         self.chunk_repo = BrdChunkRepository(db)
+        self.embedding_repo = StoryEmbeddingRepository(db)
         self.operation_repo = OperationRepository(db)
         self.openai_client = openai_client or OpenAIClient(db)
 
     def _to_response(self, item: BrdStory) -> StoryResponse:
+        similar_raw = item.cross_brd_similar or []
         return StoryResponse(
             id=item.id,
             sub_feature_id=item.sub_feature_id,
@@ -62,6 +70,9 @@ class StoryService:
             rationale=item.rationale,
             source_excerpt=item.source_excerpt,
             source_chunk_id=item.source_chunk_id,
+            cross_brd_similar=[
+                CrossBrdSimilarMatch.model_validate(m) for m in similar_raw
+            ],
             status=item.status,
             story_points=item.story_points,
             points_rationale=item.points_rationale,
@@ -74,6 +85,30 @@ class StoryService:
             created_at=item.created_at,
             updated_at=item.updated_at,
         )
+
+    async def _index_approved_story(self, story: BrdStory, *, brd_id: int) -> None:
+        if not self.openai_client.is_configured:
+            return
+        brd = await self.brd_repo.get_by_id(brd_id)
+        brd_name = brd.name if brd else f"BRD #{brd_id}"
+        ac = decode_acceptance_criteria(story.acceptance_criteria)
+        ac_text = "\n".join(f"- {c}" for c in ac)
+        embed_text = f"{story.title}\n{story.description}\n{ac_text}".strip()
+        try:
+            embedding = await self.openai_client.embed_text(embed_text)
+            await self.embedding_repo.upsert(
+                story_id=story.id,
+                user_id=story.user_id,
+                story_points=story.story_points,
+                title=story.title,
+                text=embed_text,
+                embedding=embedding,
+                brd_id=brd_id,
+                brd_name=brd_name,
+            )
+            track("indexed story embedding", story_id=story.id, brd_id=brd_id)
+        except Exception as exc:
+            track_error("story embedding index failed", exc=exc, story_id=story.id)
 
     async def _get_owned_sub_feature(
         self, user_id: int, sub_feature_id: int
@@ -157,17 +192,25 @@ class StoryService:
         )
 
         brd = await self.brd_repo.get_by_id(feature.brd_id)
+        query_parts = [
+            feature.title,
+            feature.description,
+            sub_feature.title,
+            sub_feature.description,
+            sub_feature.source_excerpt,
+        ]
         brd_context = await fetch_brd_chunk_context(
             self.openai_client,
             self.chunk_repo,
             brd_id=feature.brd_id,
-            query_parts=[
-                feature.title,
-                feature.description,
-                sub_feature.title,
-                sub_feature.description,
-                sub_feature.source_excerpt,
-            ],
+            query_parts=query_parts,
+        )
+        cross_brd_context = await fetch_cross_brd_story_context(
+            self.db,
+            self.openai_client,
+            user_id=operation.user_id,
+            exclude_brd_id=feature.brd_id,
+            query_parts=query_parts,
         )
         output = await generate_stories_from_sub_feature(
             self.openai_client,
@@ -177,6 +220,7 @@ class StoryService:
             sub_feature_description=sub_feature.description,
             source_excerpt=sub_feature.source_excerpt,
             brd_context=brd_context,
+            cross_brd_context=cross_brd_context,
             pipeline_context=format_pipeline_context(
                 brd.pipeline_settings if brd else None, for_stage="stories"
             ),
@@ -215,6 +259,14 @@ class StoryService:
 
         if not items:
             raise RuntimeError("Story generation returned no items")
+
+        await annotate_stories_with_cross_brd_matches(
+            self.db,
+            self.openai_client,
+            user_id=operation.user_id,
+            exclude_brd_id=feature.brd_id,
+            stories=items,
+        )
 
         track_saved(
             "stories",
@@ -298,6 +350,13 @@ class StoryService:
         item.reviewed_by = user_id
         item.reviewed_at = datetime.now(timezone.utc)
         item = await self.repo.update(item)
+
+        sub_feature = await self.sub_feature_repo.get_by_id(item.sub_feature_id)
+        if sub_feature:
+            feature = await self.feature_repo.get_by_id(sub_feature.feature_id)
+            if feature:
+                await self._index_approved_story(item, brd_id=feature.brd_id)
+
         return StoryReviewResponse(
             id=item.id,
             status=item.status,

@@ -38,6 +38,7 @@ def service():
     svc._get_owned_feature = AsyncMock()
     svc.repo = MagicMock()
     svc.repo.update = AsyncMock(side_effect=lambda feature: feature)
+    svc._index_approved_feature = AsyncMock()
     return svc
 
 
@@ -68,6 +69,7 @@ async def test_approve_allows_when_all_clarifying_answered(service):
 
     assert result.status == "approved"
     service.repo.update.assert_awaited_once()
+    service._index_approved_feature.assert_awaited_once()
 
 
 @pytest.mark.asyncio

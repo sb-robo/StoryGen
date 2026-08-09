@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.models.base import Base
@@ -41,6 +42,7 @@ class BrdStory(Base):
     source_chunk_id: Mapped[int | None] = mapped_column(
         ForeignKey("brd_chunks.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    cross_brd_similar: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=StoryReviewStatus.PENDING_REVIEW.value
     )

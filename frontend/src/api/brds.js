@@ -33,6 +33,15 @@ export function getLlmUsage(brdId) {
   return api.get(`/brds/${brdId}/llm-usage`)
 }
 
+/** Indexed markdown chunks for the BRD (per pipeline_settings.chunk_level). */
+export function listChunks(brdId) {
+  return api.get(`/brds/${brdId}/chunks`)
+}
+
+export function listImages(brdId) {
+  return api.get(`/brds/${brdId}/images`)
+}
+
 export function uploadBrd(name, file, pipelineSettings = null) {
   const form = new FormData()
   form.append('name', name)

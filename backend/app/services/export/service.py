@@ -5,9 +5,9 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.brd_document import BrdDocument
-from app.db.models.brd_feature import BrdFeature
+from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.db.models.brd_story import BrdStory, StoryReviewStatus
-from app.db.models.brd_sub_feature import BrdSubFeature
+from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
 from app.db.models.brd_test_case import BrdTestCase, TestCaseStatus
 from app.repositories.brd_repository import BrdRepository
 from app.services.export.base import ExportFile, ExportFormat, ExportRow
@@ -96,6 +96,8 @@ class ExportService:
             .where(
                 BrdFeature.brd_id == brd_id,
                 BrdFeature.user_id == user_id,
+                BrdFeature.status == FeatureStatus.APPROVED.value,
+                BrdSubFeature.status == ReviewStatus.APPROVED.value,
                 BrdStory.user_id == user_id,
                 BrdStory.status == StoryReviewStatus.APPROVED.value,
             )

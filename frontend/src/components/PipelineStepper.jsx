@@ -55,7 +55,7 @@ export function PipelineStepper({ stages, activeStage, onStageClick, onPrimaryAc
           else if (stage.id === 'points' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending} points`
           else if (stage.id === 'tests' && stageData.counts?.total === 0) ctaLabel = 'Generate test cases'
           else if (stage.id === 'tests' && stageData.pending > 0) ctaLabel = `Review ${stageData.pending}`
-          else if (stage.id === 'export') ctaLabel = 'Export CSV'
+          else if (stage.id === 'export') ctaLabel = 'Export…'
 
           const exportTitle =
             stage.id === 'export' && exportReadiness

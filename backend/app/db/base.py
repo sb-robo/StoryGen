@@ -6,6 +6,7 @@ from app.db.models.brd_feature import BrdFeature
 from app.db.models.brd_sub_feature import BrdSubFeature
 from app.db.models.brd_story import BrdStory
 from app.db.models.brd_test_case import BrdTestCase
+from app.db.models.feature_embedding import FeatureEmbedding
 from app.db.models.story_embedding import StoryEmbedding
 from app.db.models.llm_call_log import LlmCallLog
 from app.db.models.password_reset_token import PasswordResetToken

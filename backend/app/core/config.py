@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     RAG_SIMILAR_CHUNK_LIMIT: int = 8
     RAG_FEATURE_CHUNK_LIMIT: int = 12
     RAG_FEATURE_RETRIEVAL_THRESHOLD: int = 12
+    RAG_CROSS_BRD_FEATURE_LIMIT: int = 5
+    RAG_CROSS_BRD_STORY_LIMIT: int = 5
+    RAG_CROSS_BRD_MAX_DISTANCE: float = 0.35
     LLM_MAX_RETRIES: int = 3
     LLM_TIMEOUT_SECONDS: int = 120
     LLM_MAX_ITERATIONS: int = 2
@@ -50,6 +53,10 @@ class Settings(BaseSettings):
     SMTP_FROM: str | None = None
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 20
+    RATE_LIMIT_UPLOAD_PER_MINUTE: int = 10
+    RATE_LIMIT_AI_PER_MINUTE: int = 30
 
     @field_validator(
         "OPENAI_API_KEY",

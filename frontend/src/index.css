@@ -1030,8 +1030,12 @@ button:focus-visible,
 .review-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
   flex-shrink: 0;
+}
+
+.review-actions > .btn:not(:last-child) {
+  margin-right: 0.75rem;
 }
 
 .rationale {
@@ -1179,6 +1183,32 @@ button:focus-visible,
   white-space: pre-wrap;
 }
 
+.cross-brd-warning {
+  border-left: 3px solid #b45309;
+  padding-left: 0.75rem;
+  background: #fffbeb;
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+  padding-right: 0.75rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.cross-brd-warning-lead {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.cross-brd-warning-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.875rem;
+}
+
+.cross-brd-warning-list li + li {
+  margin-top: 0.35rem;
+}
+
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1301,6 +1331,59 @@ button:focus-visible,
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.export-ready-actions {
+  flex-wrap: wrap;
+}
+
+.export-ready-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 1rem;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+}
+
+.export-ready-banner strong {
+  font-weight: 600;
+}
+
+.source-chunk-row {
+  margin-top: 0.5rem;
+}
+
+.source-chunk-link {
+  padding-left: 0;
+}
+
+.chunk-provenance-header {
+  margin-bottom: 0.75rem;
+}
+
+.chunk-provenance-path {
+  margin: 0 0 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chunk-provenance-heading {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.chunk-provenance-excerpt {
+  margin: 0 0 0.75rem;
+}
+
+.chunk-provenance-body {
+  max-height: min(60vh, 480px);
 }
 
 /* —— Phase 1 workspace —— */
@@ -1556,6 +1639,10 @@ button:focus-visible,
   border-radius: 8px;
   padding: 1rem;
   box-shadow: var(--shadow);
+}
+
+.overview-export-ready .btn {
+  margin-top: 0.75rem;
 }
 
 .stepper-list {
@@ -1887,6 +1974,18 @@ button:focus-visible,
 .queue-empty {
   padding: 2rem 0;
   text-align: center;
+}
+
+.queue-caught-up {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+}
+
+.queue-caught-up .overview-suggestion {
+  margin: 0;
+  max-width: 28rem;
 }
 
 .queue-table-wrap {
@@ -2269,9 +2368,15 @@ button:focus-visible,
 }
 
 .detail-panel-toolbar {
+  display: flex;
+  align-items: center;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: #fafafa;
+}
+
+.detail-panel-toolbar .review-actions {
+  width: 100%;
 }
 
 .detail-panel-body {
@@ -2334,8 +2439,12 @@ button:focus-visible,
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  align-items: center;
   margin-top: 0.75rem;
+}
+
+.detail-actions > .btn:not(:last-child) {
+  margin-right: 0.75rem;
 }
 
 .parsed-content-panel {

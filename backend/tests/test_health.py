@@ -16,8 +16,11 @@ def test_health_ok_when_db_ping_succeeds():
     factory = MagicMock(return_value=session)
 
     with patch("app.main.async_session_local", factory):
-        with TestClient(app) as client:
-            response = client.get("/health")
+        with patch(
+            "app.main.reclaim_orphaned_operations", new=AsyncMock(return_value=0)
+        ):
+            with TestClient(app) as client:
+                response = client.get("/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -35,8 +38,11 @@ def test_health_degraded_when_db_ping_fails():
     factory = MagicMock(return_value=session)
 
     with patch("app.main.async_session_local", factory):
-        with TestClient(app) as client:
-            response = client.get("/health")
+        with patch(
+            "app.main.reclaim_orphaned_operations", new=AsyncMock(return_value=0)
+        ):
+            with TestClient(app) as client:
+                response = client.get("/health")
 
     assert response.status_code == 503
     body = response.json()

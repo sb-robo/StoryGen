@@ -13,7 +13,11 @@ from app.repositories.feature_repository import (
     decode_clarifying_questions,
 )
 from app.repositories.story_repository import decode_acceptance_criteria
-from app.schemas.feature_schema import ClarifyingAnswer, FeatureResponse
+from app.schemas.feature_schema import (
+    ClarifyingAnswer,
+    CrossBrdSimilarMatch,
+    FeatureResponse,
+)
 from app.schemas.pipeline_schema import (
     PipelineBlocker,
     PipelineSummaryResponse,
@@ -23,6 +27,7 @@ from app.schemas.pipeline_schema import (
     StatusCounts,
     SuggestedStep,
 )
+from app.schemas.story_schema import CrossBrdSimilarMatch as StoryCrossBrdSimilarMatch
 from app.schemas.story_schema import StoryResponse
 from app.schemas.sub_feature_schema import SubFeatureResponse
 from app.schemas.test_case_schema import TestCaseResponse
@@ -163,6 +168,10 @@ def _feature_response(feature: BrdFeature) -> FeatureResponse:
         ],
         source_excerpt=feature.source_excerpt,
         source_chunk_id=feature.source_chunk_id,
+        cross_brd_similar=[
+            CrossBrdSimilarMatch.model_validate(m)
+            for m in (feature.cross_brd_similar or [])
+        ],
         status=feature.status,
         reviewed_by=feature.reviewed_by,
         reviewed_at=feature.reviewed_at,
@@ -185,6 +194,10 @@ def _story_response(item: BrdStory) -> StoryResponse:
         rationale=item.rationale,
         source_excerpt=item.source_excerpt,
         source_chunk_id=item.source_chunk_id,
+        cross_brd_similar=[
+            StoryCrossBrdSimilarMatch.model_validate(m)
+            for m in (item.cross_brd_similar or [])
+        ],
         status=item.status,
         story_points=item.story_points,
         points_rationale=item.points_rationale,

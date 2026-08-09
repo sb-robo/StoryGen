@@ -23,6 +23,8 @@ export function ReviewQueue({
   busy,
   onBulkApprove,
   bulkStatus,
+  suggestedStep,
+  onSuggestedAction,
 }) {
   const [checkedKeys, setCheckedKeys] = useState(() => new Set())
 
@@ -185,9 +187,28 @@ export function ReviewQueue({
       )}
 
       {filtered.length === 0 && (
-        <p className="empty-hint queue-empty">
-          {items.length === 0 ? 'Nothing pending review — you are caught up!' : 'No items match this filter.'}
-        </p>
+        <div className="queue-empty">
+          {items.length === 0 ? (
+            <>
+              <p className="empty-hint">Nothing pending review — you are caught up!</p>
+              {suggestedStep?.action && suggestedStep.action !== 'review' && (
+                <div className="queue-caught-up">
+                  <p className="overview-suggestion">{suggestedStep.label}</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={busy}
+                    onClick={() => onSuggestedAction?.(suggestedStep)}
+                  >
+                    Continue: {suggestedStep.label}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="empty-hint">No items match this filter.</p>
+          )}
+        </div>
       )}
 
       {filtered.length > 0 && (

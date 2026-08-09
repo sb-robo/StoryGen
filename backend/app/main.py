@@ -21,14 +21,20 @@ for _noisy in ("httpx", "httpcore", "openai", "urllib3", "uvicorn.access"):
 
 from app.api.v1 import api  # noqa: E402 (import after logging setup)
 from app.db.session import async_session_local  # noqa: E402
+from app.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 from app.middleware.request_tracker import RequestTrackerMiddleware  # noqa: E402
+from app.middleware.security_headers import SecurityHeadersMiddleware  # noqa: E402
+from app.services.operations.startup import reclaim_orphaned_operations  # noqa: E402
 from app.utils.process_tracker import track_error  # noqa: E402
 
 logger = getLogger(__name__)
 ROUTE_PREFIX = "/api/v1"
 app = FastAPI(title="StoryGen API", version="0.1.0")
 
+# Starlette applies middleware in reverse add order (last added = outermost).
 app.add_middleware(RequestTrackerMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -101,3 +107,19 @@ async def startup_event():
             "AUTH_DISABLED=true (DEBUG mode): Bearer auth is bypassed. "
             "Do not use this in production."
         )
+    if settings.RATE_LIMIT_ENABLED:
+        logger.info(
+            "Rate limits enabled: auth=%s/min upload=%s/min ai=%s/min",
+            settings.RATE_LIMIT_AUTH_PER_MINUTE,
+            settings.RATE_LIMIT_UPLOAD_PER_MINUTE,
+            settings.RATE_LIMIT_AI_PER_MINUTE,
+        )
+    try:
+        orphaned = await reclaim_orphaned_operations()
+        if orphaned:
+            logger.warning(
+                "Reclaimed %s orphaned async operation(s) left pending/running after restart",
+                orphaned,
+            )
+    except Exception as exc:
+        logger.warning("Orphan operation reclaim skipped: %s", exc)

@@ -84,9 +84,20 @@ export function OverviewTab({
         </div>
 
         {exportReady && exportReadiness && (
-          <div className="overview-section">
+          <div className="overview-section overview-export-ready">
             <h3>Export readiness</h3>
             <p className="overview-suggestion">{exportReadinessLabel(exportReadiness)}</p>
+            <p className="meta">
+              Only approved stories and approved test cases are included. Pending review items are skipped.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => onSuggestedAction?.({ action: 'export_csv', label: 'Export' })}
+              disabled={busy || exportReadiness.approvedStories <= 0}
+            >
+              Export…
+            </button>
           </div>
         )}
 

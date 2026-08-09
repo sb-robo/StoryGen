@@ -9,8 +9,10 @@ import { buildAncestorPath, nodeToItem } from '../utils/lineage'
 import { Breadcrumb } from './Breadcrumb'
 import { ClarifyingAnswersForm } from './ClarifyingAnswersForm'
 import { ConfirmModal } from './ConfirmModal'
+import { CrossBrdSimilarWarning } from './CrossBrdSimilarWarning'
 import { EditModal } from './EditModal'
 import { ReviewActions } from './ReviewCard'
+import { SourceGrounding } from './SourceGrounding'
 import { StatusBadge } from './StatusBadge'
 import { StoryDetailTabs } from './StoryDetailTabs'
 import { SubFeatureTile } from './SubFeatureTile'
@@ -24,6 +26,7 @@ export function DetailPanel({
   onRunJob,
   onApprove,
   onReject,
+  onOpenChunk,
   editRequestKey,
   onEditRequestHandled,
   parents,
@@ -228,6 +231,7 @@ export function DetailPanel({
             onRefresh={onRefresh}
             busy={busy}
             onRunJob={onRunJob}
+            onOpenChunk={onOpenChunk}
             onChildCountChange={setChildCount}
             onSelectSubFeature={(sf) =>
               onSelectItem?.({
@@ -251,6 +255,7 @@ export function DetailPanel({
             onRefresh={onRefresh}
             busy={busy}
             onRunJob={onRunJob}
+            onOpenChunk={onOpenChunk}
             onChildCountChange={setChildCount}
             onSelectStory={(story) =>
               onSelectItem?.({
@@ -272,6 +277,7 @@ export function DetailPanel({
             initialTab={item.type === ITEM_TYPES.POINTS ? 'points' : 'story'}
             onRefresh={onRefresh}
             busy={busy}
+            onOpenChunk={onOpenChunk}
             onSelectTestCase={(tc) =>
               onSelectItem?.({
                 id: tc.id,
@@ -287,7 +293,12 @@ export function DetailPanel({
         )}
 
         {item.type === ITEM_TYPES.TEST_CASE && (
-          <TestCaseDetailContent entity={entity} showRationale={showRationale} onToggleRationale={() => setShowRationale(!showRationale)} />
+          <TestCaseDetailContent
+            entity={entity}
+            showRationale={showRationale}
+            onToggleRationale={() => setShowRationale(!showRationale)}
+            onOpenChunk={onOpenChunk}
+          />
         )}
       </div>
 
@@ -387,7 +398,17 @@ export function DetailPanel({
   )
 }
 
-function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRefresh, busy, onRunJob, onSelectSubFeature, onChildCountChange }) {
+function FeatureDetailContent({
+  feature,
+  showRationale,
+  onToggleRationale,
+  onRefresh,
+  busy,
+  onRunJob,
+  onOpenChunk,
+  onSelectSubFeature,
+  onChildCountChange,
+}) {
   const [subFeatures, setSubFeatures] = useState([])
   const [enqueueing, setEnqueueing] = useState(false)
   const [regenConfirm, setRegenConfirm] = useState(false)
@@ -442,6 +463,8 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
         <p className="review-description">{feature.description}</p>
       </section>
 
+      <CrossBrdSimilarWarning matches={feature.cross_brd_similar} label="features" />
+
       {feature.clarifying_questions?.length > 0 && (
         <section className="detail-block">
           <h4>Clarifying questions</h4>
@@ -458,17 +481,11 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
         </section>
       )}
 
-      {(feature.source_excerpt || feature.source_chunk_id) && (
-        <section className="detail-block">
-          <h4>Source grounding</h4>
-          {feature.source_excerpt && (
-            <p className="source-excerpt">{feature.source_excerpt}</p>
-          )}
-          {feature.source_chunk_id != null && (
-            <p className="meta">Linked BRD chunk #{feature.source_chunk_id}</p>
-          )}
-        </section>
-      )}
+      <SourceGrounding
+        sourceExcerpt={feature.source_excerpt}
+        sourceChunkId={feature.source_chunk_id}
+        onOpenChunk={(id) => onOpenChunk?.(id, feature.source_excerpt)}
+      />
 
       <section className="detail-block">
         <div className="section-toolbar">
@@ -511,7 +528,16 @@ function FeatureDetailContent({ feature, showRationale, onToggleRationale, onRef
   )
 }
 
-function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale, busy, onRunJob, onSelectStory, onChildCountChange }) {
+function SubFeatureDetailContent({
+  subFeature,
+  showRationale,
+  onToggleRationale,
+  busy,
+  onRunJob,
+  onOpenChunk,
+  onSelectStory,
+  onChildCountChange,
+}) {
   const [stories, setStories] = useState([])
   const [enqueueing, setEnqueueing] = useState(false)
   const [regenConfirm, setRegenConfirm] = useState(false)
@@ -574,12 +600,11 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
         </section>
       )}
 
-      {subFeature.source_excerpt && (
-        <section className="detail-block">
-          <h4>Source excerpt</h4>
-          <p className="source-excerpt">{subFeature.source_excerpt}</p>
-        </section>
-      )}
+      <SourceGrounding
+        sourceExcerpt={subFeature.source_excerpt}
+        sourceChunkId={subFeature.source_chunk_id}
+        onOpenChunk={(id) => onOpenChunk?.(id, subFeature.source_excerpt)}
+      />
 
       <section className="detail-block">
         <div className="section-toolbar">
@@ -636,7 +661,7 @@ function SubFeatureDetailContent({ subFeature, showRationale, onToggleRationale,
   )
 }
 
-function TestCaseDetailContent({ entity, showRationale, onToggleRationale }) {
+function TestCaseDetailContent({ entity, showRationale, onToggleRationale, onOpenChunk }) {
   return (
     <>
       <section className="detail-block">
@@ -648,6 +673,11 @@ function TestCaseDetailContent({ entity, showRationale, onToggleRationale }) {
         <p className="review-description">{entity.expected_result}</p>
       </section>
       <p className="meta">Type: {entity.test_type}</p>
+      <SourceGrounding
+        sourceExcerpt={entity.source_excerpt}
+        sourceChunkId={entity.source_chunk_id}
+        onOpenChunk={(id) => onOpenChunk?.(id, entity.source_excerpt)}
+      />
       {entity.rationale && (
         <section className="detail-block">
           <button type="button" className="btn btn-ghost btn-sm" onClick={onToggleRationale}>

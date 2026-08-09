@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.async_operation import AsyncOperation, OperationStatus
@@ -258,3 +258,31 @@ class OperationRepository:
             )
         )
         await self.db.flush()
+
+    async def fail_orphaned_in_flight(self, *, reason: str) -> int:
+        """
+        Mark pending/running ops as failed after a process restart.
+
+        In-process BackgroundTasks do not survive restarts; reclaiming stuck
+        rows keeps the ops UI honest until a durable worker exists.
+        """
+        now = datetime.now(timezone.utc)
+        result = await self.db.execute(
+            update(AsyncOperation)
+            .where(
+                AsyncOperation.status.in_(
+                    [
+                        OperationStatus.PENDING.value,
+                        OperationStatus.RUNNING.value,
+                    ]
+                )
+            )
+            .values(
+                status=OperationStatus.FAILED.value,
+                error_message=reason,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
+        await self.db.flush()
+        return int(result.rowcount or 0)

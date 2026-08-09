@@ -18,7 +18,11 @@ class StoryEmbedding(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    story_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    brd_id: Mapped[int | None] = mapped_column(
+        ForeignKey("brd_documents.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    brd_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(

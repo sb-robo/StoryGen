@@ -16,6 +16,7 @@ async def generate_stories(
     sub_feature_description: str,
     source_excerpt: str | None,
     brd_context: str = "",
+    cross_brd_context: str = "",
     pipeline_context: str = "",
     operation_id: str | None,
     user_id: int,
@@ -34,6 +35,8 @@ async def generate_stories(
                     sub_feature_description=sub_feature_description,
                     source_excerpt=source_excerpt or "(none)",
                     brd_context=brd_context or "(no relevant BRD sections retrieved)",
+                    cross_brd_context=cross_brd_context
+                    or "(no similar approved stories from your other BRDs)",
                     pipeline_context=pipeline_context or "(no extra settings)",
                 ),
             },

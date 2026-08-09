@@ -6,11 +6,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.dialects import postgresql
 
 from app.db.models.brd_document import BrdDocument
-from app.db.models.brd_feature import BrdFeature
-from app.db.models.brd_story import BrdStory
-from app.db.models.brd_sub_feature import BrdSubFeature
+from app.db.models.brd_feature import BrdFeature, FeatureStatus
+from app.db.models.brd_story import BrdStory, StoryReviewStatus
+from app.db.models.brd_sub_feature import BrdSubFeature, ReviewStatus
 from app.db.models.brd_test_case import BrdTestCase
 from app.repositories.story_repository import encode_acceptance_criteria
 from app.services.export.base import ExportRow
@@ -131,6 +132,34 @@ async def test_export_csv_keeps_story_row_when_no_approved_test_cases():
     assert "As a user I can log in" in data_row
     # trailing empty test-case columns still present
     assert data_row.count(",") == len(CSV_COLUMNS) - 1
+
+
+@pytest.mark.asyncio
+async def test_load_approved_rows_requires_approved_feature_and_sub_feature():
+    """Export lineage must require approved parents, not only approved stories."""
+    service = _service()
+    captured: dict = {}
+
+    async def capture_execute(query):
+        captured["sql"] = str(
+            query.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        result = MagicMock()
+        result.all = MagicMock(return_value=[])
+        return result
+
+    service.db.execute = capture_execute
+    await service._load_approved_rows(user_id=1, brd_id=42)
+
+    sql = captured["sql"].lower()
+    assert FeatureStatus.APPROVED.value in sql
+    assert ReviewStatus.APPROVED.value in sql
+    assert StoryReviewStatus.APPROVED.value in sql
+    # Parent status filters present (not only story status).
+    assert sql.count("'approved'") >= 3
 
 
 @pytest.mark.asyncio

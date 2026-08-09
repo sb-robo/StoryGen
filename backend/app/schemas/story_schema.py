@@ -11,6 +11,15 @@ class StoryStatusFilter(StrEnum):
     REJECTED = "rejected"
 
 
+class CrossBrdSimilarMatch(BaseModel):
+    kind: str
+    id: int | None = None
+    brd_id: int | None = None
+    brd_name: str
+    title: str
+    similarity: float
+
+
 class StoryResponse(BaseModel):
     id: int
     sub_feature_id: int
@@ -23,6 +32,7 @@ class StoryResponse(BaseModel):
     rationale: str
     source_excerpt: str | None = None
     source_chunk_id: int | None = None
+    cross_brd_similar: list[CrossBrdSimilarMatch] = Field(default_factory=list)
     status: str
     story_points: int | None = None
     points_rationale: str | None = None

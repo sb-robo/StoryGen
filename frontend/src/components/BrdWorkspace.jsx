@@ -6,6 +6,7 @@ import { useBrdPipeline } from '../hooks/useBrdPipeline'
 import { useReviewQueueShortcuts } from '../hooks/useReviewQueueShortcuts'
 import { runBatchAction } from '../utils/batchActions'
 import {
+  exportReadinessLabel,
   getBatchActions,
   getBlockers,
   getExportReadiness,
@@ -26,8 +27,10 @@ import {
   rejectQueueItem,
 } from '../utils/reviewActions'
 import { resolveJobFocusTarget } from '../utils/jobFocus'
+import { ChunkProvenanceModal } from './ChunkProvenanceModal'
 import { ConfirmModal } from './ConfirmModal'
 import { DetailPanel } from './DetailPanel'
+import { ExportReadyModal } from './ExportReadyModal'
 import { OverviewTab } from './OverviewTab'
 import { ParsedContentModal } from './ParsedContentModal'
 import { PipelineSettingsForm } from './PipelineSettingsForm'
@@ -67,6 +70,8 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   const [autoSelectedForBrdId, setAutoSelectedForBrdId] = useState(null)
   const [bulkStatus, setBulkStatus] = useState(null)
   const [regenConfirm, setRegenConfirm] = useState(null)
+  const [exportConfirm, setExportConfirm] = useState(false)
+  const [provenance, setProvenance] = useState(null)
   const [pendingSelectKey, setPendingSelectKey] = useState(null)
   const [editRequestKey, setEditRequestKey] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -124,18 +129,33 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   }
 
   // After approve/reject-and-continue, select the next queue item once data reloads.
+  // When the queue is empty, stay on Queue and surface the suggested next stage.
   useEffect(() => {
     if (!pendingSelectKey || loading) return
     if (pendingSelectKey === '__none__') {
       setSelectedItem(null)
       setPendingSelectKey(null)
+      setWorkspaceTab('queue')
+      const next = getSuggestedStep({
+        brdStatus: brd.status,
+        pipeline,
+        reviewQueue,
+      })
+      if (next?.action && next.action !== 'review') {
+        setBulkStatus({
+          failed: 0,
+          message: `Caught up — next: ${next.label}`,
+        })
+      } else {
+        setBulkStatus({ failed: 0, message: 'Caught up — nothing pending review.' })
+      }
       return
     }
     const found = reviewQueue.find((item) => queueItemKey(item) === pendingSelectKey)
     setSelectedItem(found ?? reviewQueue[0] ?? null)
     setPendingSelectKey(null)
     if (found || reviewQueue.length > 0) setWorkspaceTab('queue')
-  }, [pendingSelectKey, reviewQueue, loading])
+  }, [pendingSelectKey, reviewQueue, loading, brd.status, pipeline])
 
   // Jobs drawer click-through: focus the affected item when pipeline data is ready.
   useEffect(() => {
@@ -299,13 +319,14 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       if (format === 'jira') await brdApi.exportBrdJira(brdId)
       else if (format === 'markdown') await brdApi.exportBrdMarkdown(brdId)
       else await brdApi.exportBrdCsv(brdId)
+      setExportConfirm(false)
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleExportCsv() {
-    await handleExport('csv')
+  function openExportConfirm() {
+    setExportConfirm(true)
   }
 
   const handleApproveItem = useCallback(
@@ -411,16 +432,12 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
   })
 
   async function executeBatchAction(actionId) {
-    if (actionId === 'export_csv') {
-      await handleExport('csv')
-      return
-    }
-    if (actionId === 'export_jira') {
-      await handleExport('jira')
-      return
-    }
-    if (actionId === 'export_markdown') {
-      await handleExport('markdown')
+    if (
+      actionId === 'export_csv' ||
+      actionId === 'export_jira' ||
+      actionId === 'export_markdown'
+    ) {
+      openExportConfirm()
       return
     }
     setBusy(true)
@@ -508,7 +525,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
     }
 
     if (stageId === 'export') {
-      await handleExportCsv()
+      openExportConfirm()
     }
   }
 
@@ -523,18 +540,16 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
       step.action === 'export_jira' ||
       step.action === 'export_markdown'
     ) {
-      const format =
-        step.action === 'export_jira'
-          ? 'jira'
-          : step.action === 'export_markdown'
-            ? 'markdown'
-            : 'csv'
-      handleExport(format)
+      openExportConfirm()
       return
     }
     if (step.action) {
       handleBatchAction(step.action)
     }
+  }
+
+  function handleOpenChunk(chunkId, sourceExcerpt) {
+    setProvenance({ chunkId, sourceExcerpt: sourceExcerpt ?? null })
   }
 
   function handleStageClick(stageId) {
@@ -618,6 +633,26 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
         />
       )}
 
+      {exportConfirm && (
+        <ExportReadyModal
+          exportReadiness={exportReadiness}
+          busy={busy}
+          onExport={(format) => {
+            void handleExport(format)
+          }}
+          onClose={() => setExportConfirm(false)}
+        />
+      )}
+
+      {provenance && (
+        <ChunkProvenanceModal
+          brdId={brdId}
+          chunkId={provenance.chunkId}
+          sourceExcerpt={provenance.sourceExcerpt}
+          onClose={() => setProvenance(null)}
+        />
+      )}
+
       <PipelineStepper
         stages={pipeline?.stages}
         activeStage={activeStage}
@@ -626,6 +661,23 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
         busy={busy || loading}
         exportReadiness={exportReadiness}
       />
+
+      {brdReady && pipeline?.stages?.export?.status === 'ready' && (
+        <div className="export-ready-banner" role="status">
+          <div>
+            <strong>Ready to export</strong>
+            <span className="meta"> — {exportReadinessLabel(exportReadiness)}</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={busy || loading}
+            onClick={openExportConfirm}
+          >
+            Export…
+          </button>
+        </div>
+      )}
 
       {!brdReady && (
         <section className="panel workspace-notice">
@@ -734,6 +786,8 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                   busy={busy || loading}
                   onBulkApprove={handleBulkApprove}
                   bulkStatus={bulkStatus}
+                  suggestedStep={suggestedStep}
+                  onSuggestedAction={handleSuggestedAction}
                 />
               )}
             </div>
@@ -757,6 +811,7 @@ export function BrdWorkspace({ brd, onRefreshBrd }) {
                   onRunJob={handleRunJob}
                   onApprove={() => handleApproveItem(selectedItem)}
                   onReject={() => handleRejectItem(selectedItem)}
+                  onOpenChunk={handleOpenChunk}
                   editRequestKey={editRequestKey}
                   onEditRequestHandled={() => setEditRequestKey(null)}
                   parents={parents}

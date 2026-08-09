@@ -13,6 +13,7 @@ from app.db.models.brd_document import BrdStatus
 from app.db.models.brd_feature import BrdFeature, FeatureStatus
 from app.repositories.brd_chunk_repository import BrdChunkRepository
 from app.repositories.brd_repository import BrdRepository
+from app.repositories.feature_embedding_repository import FeatureEmbeddingRepository
 from app.repositories.feature_repository import (
     FeatureRepository,
     decode_clarifying_answers,
@@ -24,6 +25,7 @@ from app.repositories.feature_repository import (
 from app.repositories.operation_repository import OperationRepository
 from app.schemas.feature_schema import (
     ClarifyingAnswer,
+    CrossBrdSimilarMatch,
     FeatureExtractionResultResponse,
     FeatureListResponse,
     FeatureResponse,
@@ -31,10 +33,17 @@ from app.schemas.feature_schema import (
     FeatureUpdateRequest,
 )
 from app.schemas.operation_schema import OperationResponse
-from app.schemas.pipeline_settings_schema import format_pipeline_context
+from app.schemas.pipeline_settings_schema import (
+    format_pipeline_context,
+    parse_pipeline_settings,
+)
 from app.services.ai._chunk_context import fetch_brd_chunk_context
+from app.services.ai._cross_brd import (
+    annotate_features_with_cross_brd_matches,
+    fetch_cross_brd_feature_context,
+)
 from app.services.brd.storage_service import BrdStorageService
-from app.utils.process_tracker import track, track_queued, track_run, track_saved
+from app.utils.process_tracker import track, track_error, track_queued, track_run, track_saved
 
 
 class FeatureService:
@@ -49,11 +58,13 @@ class FeatureService:
         self.repo = FeatureRepository(db)
         self.brd_repo = BrdRepository(db)
         self.chunk_repo = BrdChunkRepository(db)
+        self.embedding_repo = FeatureEmbeddingRepository(db)
         self.operation_repo = OperationRepository(db)
         self.storage = storage or BrdStorageService()
         self.openai_client = openai_client or OpenAIClient(db)
 
     def _to_response(self, feature: BrdFeature) -> FeatureResponse:
+        similar_raw = feature.cross_brd_similar or []
         return FeatureResponse(
             id=feature.id,
             brd_id=feature.brd_id,
@@ -70,6 +81,9 @@ class FeatureService:
             ],
             source_excerpt=feature.source_excerpt,
             source_chunk_id=feature.source_chunk_id,
+            cross_brd_similar=[
+                CrossBrdSimilarMatch.model_validate(item) for item in similar_raw
+            ],
             status=feature.status,
             reviewed_by=feature.reviewed_by,
             reviewed_at=feature.reviewed_at,
@@ -77,6 +91,31 @@ class FeatureService:
             created_at=feature.created_at,
             updated_at=feature.updated_at,
         )
+
+    async def _index_approved_feature(self, feature: BrdFeature) -> None:
+        if not self.openai_client.is_configured:
+            return
+        brd = await self.brd_repo.get_by_id(feature.brd_id)
+        brd_name = brd.name if brd else f"BRD #{feature.brd_id}"
+        embed_text = f"{feature.title}\n{feature.description}".strip()
+        try:
+            embedding = await self.openai_client.embed_text(embed_text)
+            await self.embedding_repo.upsert(
+                feature_id=feature.id,
+                user_id=feature.user_id,
+                brd_id=feature.brd_id,
+                brd_name=brd_name,
+                title=feature.title,
+                text=embed_text,
+                embedding=embedding,
+            )
+            track("indexed feature embedding", feature_id=feature.id, brd_id=feature.brd_id)
+        except Exception as exc:
+            track_error(
+                "feature embedding index failed",
+                exc=exc,
+                feature_id=feature.id,
+            )
 
     def _operation_response(self, operation: AsyncOperation) -> OperationResponse:
         return OperationResponse(
@@ -205,6 +244,23 @@ class FeatureService:
         existing_constraints = format_existing_feature_constraints(
             approved, edited_pending=edited_pending or None
         )
+        settings = parse_pipeline_settings(brd.pipeline_settings)
+        cross_brd_context = await fetch_cross_brd_feature_context(
+            self.db,
+            self.openai_client,
+            user_id=operation.user_id,
+            exclude_brd_id=brd.id,
+            query_parts=[
+                brd.name,
+                settings.domain_context,
+                "Product features, capabilities, and functional requirements",
+            ],
+        )
+        if cross_brd_context:
+            if existing_constraints == "(no existing feature constraints)":
+                existing_constraints = cross_brd_context
+            else:
+                existing_constraints = f"{existing_constraints}\n\n{cross_brd_context}"
 
         extractor = FeatureExtractor(
             self.openai_client,
@@ -251,6 +307,14 @@ class FeatureService:
 
         if not features:
             raise RuntimeError("Feature extraction returned no features")
+
+        await annotate_features_with_cross_brd_matches(
+            self.db,
+            self.openai_client,
+            user_id=operation.user_id,
+            exclude_brd_id=brd.id,
+            features=features,
+        )
 
         track_saved(
             "features",
@@ -378,6 +442,7 @@ class FeatureService:
         feature.reviewed_by = user_id
         feature.reviewed_at = datetime.now(timezone.utc)
         feature = await self.repo.update(feature)
+        await self._index_approved_feature(feature)
         return FeatureReviewResponse(
             id=feature.id,
             status=feature.status,

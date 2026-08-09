@@ -25,6 +25,7 @@ EXTRACT_SYSTEM = """You are a senior business analyst extracting software produc
 10. Respect user pipeline settings (domain, in/out of scope, count preference, instructions) as authoritative.
 
 When EXISTING APPROVED FEATURES are provided, do not recreate them. Extract only additional or missing capabilities that complement them.
+When SIMILAR APPROVED FEATURES FROM YOUR OTHER BRDs are provided, treat them as near-duplicate warnings: do not recreate the same capability unless this BRD clearly requires a distinct, differently-scoped feature.
 """
 
 EXTRACT_USER = """Extract product features from this BRD content.
@@ -78,6 +79,7 @@ Rules:
 - Keep descriptions outcome-focused with clear boundaries.
 - Preserve strong features that already look good.
 - Do not recreate EXISTING APPROVED FEATURES — leave those as covered.
+- Respect SIMILAR APPROVED FEATURES FROM YOUR OTHER BRDs — avoid near-duplicates unless scope clearly differs.
 - Keep confidence, rationale, source_excerpt, and source_section_path accurate.
 """
 
