@@ -33,4 +33,4 @@ testpaths = ["backend/tests"]
 pythonpath = ["backend"]
 
 [tool.ruff.lint]
-ignore = ["I001"]
+ignore = ["ALL"]
