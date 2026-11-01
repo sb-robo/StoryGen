@@ -11,7 +11,8 @@ export function Layout({ children }) {
     <div className="layout">
       <header className="app-header">
         <Link to="/" className="brand">
-          StoryGen
+          <img src="/logo.png" alt="" className="brand-mark" width={32} height={32} />
+          <span className="brand-name">StoryGen</span>
         </Link>
         <div className="header-actions">
           <ThemeToggle />
