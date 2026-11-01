@@ -11,6 +11,7 @@ from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.schemas.auth_schema import (
     ForgotPasswordResponse,
     LoginResponse,
+    MessageResponse,
     PasswordResetConfirmRequest,
     UserLoginRequest,
     UserPasswordChangeRequest,
@@ -101,13 +102,13 @@ class AuthService:
         await self.refresh_repo.revoke_by_hash(hash_token(refresh_token))
         return await self._issue_tokens(user)
 
-    async def logout(self, refresh_token: str) -> dict:
+    async def logout(self, refresh_token: str) -> MessageResponse:
         await self.refresh_repo.revoke_by_hash(hash_token(refresh_token))
-        return {"message": "Logged out successfully"}
+        return MessageResponse(message="Logged out successfully")
 
-    async def logout_all(self, user: User) -> dict:
+    async def logout_all(self, user: User) -> MessageResponse:
         await self.refresh_repo.revoke_all_for_user(user.id)
-        return {"message": "Logged out from all devices"}
+        return MessageResponse(message="Logged out from all devices")
 
     async def forgot_password(self, email: str) -> ForgotPasswordResponse:
         message = "If that email exists, a reset link has been sent"
@@ -132,7 +133,7 @@ class AuthService:
             reset_token=raw_token if settings.DEBUG else None,
         )
 
-    async def reset_password(self, data: PasswordResetConfirmRequest) -> dict:
+    async def reset_password(self, data: PasswordResetConfirmRequest) -> MessageResponse:
         reset_token = await self.reset_repo.get_valid_by_hash(hash_token(data.token))
         if not reset_token:
             raise HTTPException(
@@ -151,9 +152,9 @@ class AuthService:
         await self.repo.update_password(user, hashed_password)
         await self.reset_repo.mark_used(hash_token(data.token))
         await self.refresh_repo.revoke_all_for_user(user.id)
-        return {"message": "Password reset successfully. Please log in."}
+        return MessageResponse(message="Password reset successfully. Please log in.")
 
-    async def change_password(self, data: UserPasswordChangeRequest, user: User) -> dict:
+    async def change_password(self, data: UserPasswordChangeRequest, user: User) -> MessageResponse:
         if not verify_password(data.current_password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -163,4 +164,4 @@ class AuthService:
         hashed_password = hash_password(data.password)
         await self.repo.update_password(user, hashed_password)
         await self.refresh_repo.revoke_all_for_user(user.id)
-        return {"message": "Password changed successfully. Please log in again."}
+        return MessageResponse(message="Password changed successfully. Please log in again.")
